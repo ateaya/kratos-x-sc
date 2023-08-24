@@ -672,9 +672,42 @@ describe("MyERC20 basic test", function () {
             await ethers.provider.send("evm_increaseTime", [days * 24 * 60 * 60]);
         }
 
-        // async depositAndWithdraw(days) {
+        async function depositAndRequestWithdraw(days) {
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
 
-        // }
+            const usdc_user1 = await contracts.usdc.connect(accounts.user1);
+            await usdc_user1.approve(await contracts.kratosx.getAddress(), 5000);
+
+            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
+                .to.emit(contracts.kratosx, "DepositApproved")
+                    .withArgs(accounts.user1.address, 1);
+
+            await timeWarpDays(days);
+
+            days += 7
+            let ratePercent = 0;
+            if (days < 180) {
+                ratePercent = 0;
+            } else if (days < 365) {    //  < 1 year
+                ratePercent = 5;
+            } else if (days < 730) {    //  1 years < days > 2 years
+                ratePercent = 5;
+            } else if (days < 1095) {   //  2 years < days > 3 years
+                ratePercent = 6;
+            } else if (days < 1460) {   //  3 years < days > 4 years
+                ratePercent = 7;
+            } else if (days < 1825) {   //  4 years < days > 5 years
+                ratePercent = 8;
+            } else {                        //  > 5 years
+                days = 1825;            //  cap the day count
+                ratePercent = 9;
+            }
+
+
+            await expect(contracts.kratosx.requestWithdrawal(1))
+                .to.emit(contracts.kratosx, "WithdrawRequested")
+                    .withArgs(1, calculateFullValue(5000, ratePercent, days, true, false));
+        }
 
         it("Request withdrawal without a deposit", async () => {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
@@ -683,72 +716,78 @@ describe("MyERC20 basic test", function () {
         });
 
         it("Request withdrawal right after deposit", async () => {
-            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-
-            const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), 5000);
-
-            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
-                .to.emit(contracts.kratosx, "DepositApproved")
-                    .withArgs(accounts.user1.address, 1);
-
-            await expect(contracts.kratosx.requestWithdrawal(1))
-                .to.emit(contracts.kratosx, "WithdrawRequested")
-                    .withArgs(1, BigInt(5000));
+            await depositAndRequestWithdraw(0);
         });
 
 
-        it("Request withdrawal 10 seconds after deposit", async () => {
-            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-
-            const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), 5000);
-
-            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
-                .to.emit(contracts.kratosx, "DepositApproved")
-                    .withArgs(accounts.user1.address, 1);
-
-            await ethers.provider.send("evm_increaseTime", [10]);
-
-            await expect(contracts.kratosx.requestWithdrawal(1))
-                .to.emit(contracts.kratosx, "WithdrawRequested")
-                    .withArgs(1, BigInt(5000));
+        it("Request withdrawal 1 day after deposit", async () => {
+            await depositAndRequestWithdraw(1);
         });
 
         it("Request withdrawal 7 days after deposit", async () => {
-            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-            const depositDays = 7;
-
-            const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), 5000);
-
-            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
-                .to.emit(contracts.kratosx, "DepositApproved")
-                    .withArgs(accounts.user1.address, 1);
-
-            await timeWarpDays(depositDays);
-
-            await expect(contracts.kratosx.requestWithdrawal(1))
-                .to.emit(contracts.kratosx, "WithdrawRequested")
-                    .withArgs(1, calculateFullValue(5000, 0, depositDays + 7, true, false));
+            await depositAndRequestWithdraw(7);
         });
 
-        it("Request withdrawal 8 days before first 6 months", async () => {
-            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-            const depositDays = 172;
+        it("Request withdrawal near 6 months", async () => {
+            const limit = 180;
+            await depositAndRequestWithdraw(limit - 8);
+            await depositAndRequestWithdraw(limit - 7);
+            await depositAndRequestWithdraw(limit - 6);
+            await depositAndRequestWithdraw(limit - 1);
+            await depositAndRequestWithdraw(limit);
+            await depositAndRequestWithdraw(limit + 1);
+        });
 
-            const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), 5000);
+        it("Request withdrawal near 1 year", async () => {
+            const limit = 365;
+            await depositAndRequestWithdraw(limit - 8);
+            await depositAndRequestWithdraw(limit - 7);
+            await depositAndRequestWithdraw(limit - 6);
+            await depositAndRequestWithdraw(limit - 1);
+            await depositAndRequestWithdraw(limit);
+            await depositAndRequestWithdraw(limit + 1);
+        });
 
-            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
-                .to.emit(contracts.kratosx, "DepositApproved")
-                    .withArgs(accounts.user1.address, 1);
+        it("Request withdrawal near 2 years", async () => {
+            const limit = 730;
+            await depositAndRequestWithdraw(limit - 8);
+            await depositAndRequestWithdraw(limit - 7);
+            await depositAndRequestWithdraw(limit - 6);
+            await depositAndRequestWithdraw(limit - 1);
+            await depositAndRequestWithdraw(limit);
+            await depositAndRequestWithdraw(limit + 1);
+        });
 
-                    await timeWarpDays(depositDays);
+        it("Request withdrawal near 3 years", async () => {
+            const limit = 1095;
+            await depositAndRequestWithdraw(limit - 8);
+            await depositAndRequestWithdraw(limit - 7);
+            await depositAndRequestWithdraw(limit - 6);
+            await depositAndRequestWithdraw(limit - 1);
+            await depositAndRequestWithdraw(limit);
+            await depositAndRequestWithdraw(limit + 1);
+        });
 
-            await expect(contracts.kratosx.requestWithdrawal(1))
-                .to.emit(contracts.kratosx, "WithdrawRequested")
-                    .withArgs(1, calculateFullValue(5000, 0, depositDays + 7, true, false));
+        it("Request withdrawal near 4 years", async () => {
+            const limit = 1460;
+            await depositAndRequestWithdraw(limit - 8);
+            await depositAndRequestWithdraw(limit - 7);
+            await depositAndRequestWithdraw(limit - 6);
+            await depositAndRequestWithdraw(limit - 1);
+            await depositAndRequestWithdraw(limit);
+            await depositAndRequestWithdraw(limit + 1);
+        });
+
+        it("Request withdrawal near 5 years", async () => {
+            const limit = 1825;
+            await depositAndRequestWithdraw(limit - 8);
+            await depositAndRequestWithdraw(limit - 7);
+            await depositAndRequestWithdraw(limit - 6);
+            await depositAndRequestWithdraw(limit - 1);
+            await depositAndRequestWithdraw(limit);
+            await depositAndRequestWithdraw(limit + 1);
+            await depositAndRequestWithdraw(limit + 2);
+            await depositAndRequestWithdraw(limit + 3);
         });
 
 
