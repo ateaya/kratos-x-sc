@@ -3,16 +3,11 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
-
-// import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-// import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-// import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-// Uncomment this line to use console.log
 import "hardhat/console.sol";
+
+error DepositNotFound(uint256 id);
 
 /**
  * @author  Miguel Tadeu
@@ -30,35 +25,29 @@ contract KratosX is Pausable, Ownable
     event WithdrawExecuted(uint256 id, uint256 calculatedAmount);
 
     struct Deposit {
-        uint16 id;                  //  deposit id
-        address owner;              //  the wallet that baught this slot
         uint256 approveTimestamp;   //  timestamp when the deposit was created
         uint256 predictedYield;     //  the predicted/calculated yield at specific time
         uint256 lockingPeriod;      //  locking period
+        address owner;              //  the wallet that baught this slot
+        uint8 id;                   //  deposit id
         bool hasEarlyAdoptBonus;
         bool hasExtendPeriodBonus;
-
-        // uint256[] _reserved;
     }
 
-    ERC20 externalToken;          //  the address for the external token
-    // uint256 totalAmount;            //  the vaults total amount in the external token
-    // uint32 slotCount;               //  the amount of deposit slots created in the vault
-    uint256 slotValue;              //  the value of each deposit slot
-    uint256 earlyAdoptBonus;        //  the amount of slots that will earn the early adoption bonus
+    ERC20 immutable externalToken;      //  the address for the external token
+    uint256 immutable slotValue;        //  the value of each deposit slot
+    uint256 earlyAdoptBonus;            //  the amount of slots that will earn the early adoption bonus
 
     Deposit[] public availableSlots;    //  free slots
     Deposit[] public usedSlots;         //  slots occupied
 
-    constructor(address token, uint256 amount, uint16 slots) Pausable() Ownable() {
+    constructor(address token, uint256 amount, uint8 slots) Pausable() Ownable() {
         externalToken = ERC20(token);
-        // totalAmount = amount;
-        // slotCount = slots;
         slotValue = amount / slots;
         earlyAdoptBonus = 3;
 
-        for (uint16 index = slots; index > 0; --index) {
-            availableSlots.push(Deposit(index, address(0), 0, 0, 0, false, false));
+        for (uint8 index = slots; index > 0; --index) {
+            availableSlots.push(Deposit(0, 0, 0, address(0), index, false, false));
         }
     }
 
@@ -92,6 +81,8 @@ contract KratosX is Pausable, Ownable
      * @param   lockPeriod  The predicted locking period.
      */
     function approveDeposit(address depositor, uint256 lockPeriod) external onlyOwner {
+        require(availableSlots.length > 0, "No slots available.");
+
         // make the value transfer from the depositer account
         externalToken.transferFrom(depositor, owner(), slotValue);
 
@@ -156,13 +147,7 @@ contract KratosX is Pausable, Ownable
         uint256 calculatedYield = calculateYield(slotValue, dayCount, deposit.hasEarlyAdoptBonus, deposit.hasExtendPeriodBonus);
         uint256 calculatedValue = slotValue + calculatedYield;
 
-        console.log("dayCount: ", dayCount);
-
         require(externalToken.balanceOf(owner()) > calculatedValue, "Not enough liquidity in account");
-
-        console.log("transfer from:", owner());
-        console.log("transfer to:", deposit.owner);
-        console.log("transfer value:", calculatedValue);
 
         externalToken.transferFrom(owner(), deposit.owner, calculatedValue);
 
@@ -206,7 +191,7 @@ contract KratosX is Pausable, Ownable
      */
     function calculateYield(uint256 value, uint256 dayCount, bool hasEarlyAdoptBonus, bool hasExtendBonus)
         public pure returns(uint256) {
-        uint8 ratePercent = 0;
+        uint256 ratePercent;
 
         if (dayCount < 180) {
             ratePercent = 0;
@@ -226,11 +211,11 @@ contract KratosX is Pausable, Ownable
         }
 
         if (hasEarlyAdoptBonus) {
-            ratePercent += 1;
+            ratePercent = _increment(ratePercent);
         }
 
         if (hasExtendBonus && dayCount > 365) {
-            ratePercent += 1;
+            ratePercent = _increment(ratePercent);
         }
 
         return value * ratePercent * dayCount / (100 * 365);
@@ -244,18 +229,23 @@ contract KratosX is Pausable, Ownable
     ///////////////////////////////////////////////////////
     //  Private
     ///////////////////////////////////////////////////////
+    function _increment(uint256 value) private pure returns(uint256) {
+        unchecked { ++value; }
+        return value;
+    }
+
     function _timestampInDays(uint256 timestamp) private pure returns(uint256) {
         return timestamp / (60 * 60 * 24);
     }
 
     function _findSlotInCollection(Deposit[] memory collection, uint256 id) private pure returns(uint256) {
-        // TODO: would start from the end optimize the search?
-        for(uint256 index = 0; index < collection.length; ++index) {
-            if(collection[index].id == id) {
+        Deposit[] memory _collection = collection;  // TODO: check why does this reduce gas
+        for(uint256 index = 0; index < _collection.length; index = _increment(index)) {
+            if(_collection[index].id == id) {
                 return index;
             }
         }
-        revert("Item not found in collection");
+        revert DepositNotFound(id);
     }
 
     function _moveLastSlot(Deposit[] storage from, Deposit[] storage to) private returns(Deposit storage) {

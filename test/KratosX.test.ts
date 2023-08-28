@@ -9,8 +9,11 @@ import { assert } from "console";
 import { ethers, upgrades } from "hardhat";
 import { Contract } from "hardhat/internal/hardhat-network/stack-traces/model";
 import { Mutex } from "async-mutex";
+import { BaseContract } from "ethers";
+import { string } from "hardhat/internal/core/params/argumentTypes";
 const helpers = require("@nomicfoundation/hardhat-network-helpers");
 
+const SlotPrice = 5000;
 
 class Storage {
     contract: any = undefined;
@@ -382,264 +385,310 @@ describe("KratosX basic testing", function () {
         });
     });
 
+    async function makeDeposit(amount) {
+        const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+        const expectedCount = Number(amount / SlotPrice);
+        const initialAvailableSlots = await storage.getAvailableSlots();
+        const initialUsedSlots = await storage.getUsedSlots();
+        const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
+        const kratosContractAddress = await contracts.kratosx.getAddress();
+
+        expect(initialAvailableSlots.length).to.be.equal(100);
+        expect(initialUsedSlots.length).to.be.equal(0);
+
+        expect(initialBalance).to.be.equal(10000000);
+
+        const usdc_user1 = await contracts.usdc.connect(accounts.user1);
+        await expect(usdc_user1.approve(kratosContractAddress, expectedCount * SlotPrice))
+            .to.emit(contracts.usdc, "Approval")
+            .withArgs(accounts.user1.address, kratosContractAddress, expectedCount * SlotPrice);
+
+        let slotId = 0;
+        while(await usdc_user1.allowance(accounts.user1.address, kratosContractAddress) >= SlotPrice) {
+            ++slotId;
+            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
+            .to.emit(contracts.kratosx, "DepositApproved")
+                .withArgs(accounts.user1.address, slotId);
+        }
+
+        expect(slotId).to.be.equal(expectedCount);
+
+        expect(await contracts.usdc.balanceOf(accounts.user1.address))
+            .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(SlotPrice));
+
+        expect((await storage.getAvailableSlots()).length).to.be.equal(100 - expectedCount);
+        expect((await storage.getUsedSlots()).length).to.be.equal(expectedCount);
+
+    }
+
     describe("Requesting slots", () => {
 
         it("Request the first slot", async () => {
-            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-            const expectedCount = 1;
-            const initialAvailableSlots = await storage.getAvailableSlots();
-            const initialUsedSlots = await storage.getUsedSlots();
-            const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
+            await makeDeposit(SlotPrice);
+            // console.log("Request the first slot - step 1")
+            // const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            // const expectedCount = 1;
+            // const initialAvailableSlots = await storage.getAvailableSlots();
+            // const initialUsedSlots = await storage.getUsedSlots();
+            // const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
+            // const kratosContractAddress = await contracts.kratosx.getAddress();
 
-            expect(initialAvailableSlots.length).to.be.equal(100);
-            expect(initialUsedSlots.length).to.be.equal(0);
+            // expect(initialAvailableSlots.length).to.be.equal(100);
+            // expect(initialUsedSlots.length).to.be.equal(0);
 
-            expect(initialBalance).to.be.equal(10000000);
+            // expect(initialBalance).to.be.equal(10000000);
+            // console.log("Request the first slot - step 2")
 
-            let count = 0;
-            let asExpected = false;
+            // const usdc_user1 = await contracts.usdc.connect(accounts.user1);
+            // await expect(usdc_user1.approve(kratosContractAddress, expectedCount * 5000))
+            //     .to.emit(contracts.usdc, "Approval")
+            //     .withArgs(accounts.user1.address, kratosContractAddress, expectedCount * 5000);
+            // console.log("Request the first slot - step 3")
 
-            await contracts.usdc.on("Approval", async (owner, spender, amount) => {
-                const allowance = await usdc_user1.allowance(accounts.user1.address, await contracts.kratosx.getAddress());
+            // let slotId = 0;
+            // while(await usdc_user1.allowance(accounts.user1.address, kratosContractAddress) >= 5000) {
+            //     ++slotId;
+            //     await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
+            //     .to.emit(contracts.kratosx, "DepositApproved")
+            //         .withArgs(accounts.user1.address, slotId);
+            // }
 
-                if (allowance < 5000) {
-                    if (count == expectedCount) {
-                        asExpected = true;
-                    } else {
-                        console.log("Request 1 slots - not ok [count:", count, "]")
-                    }
-                    return;
-                }
+            // expect(slotId).to.be.equal(expectedCount);
 
-                ++count;
-                await expect(contracts.kratosx.approveDeposit(owner, 180))
-                    .to.emit(contracts.kratosx, "DepositApproved")
-                        .withArgs(accounts.user1.address, count);
+            // expect(await contracts.usdc.balanceOf(accounts.user1.address))
+            //     .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(5000));
 
-            });
-
-            const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), expectedCount * 5000);
-
-            await new Promise(r => setTimeout(r, 10000));
-
-            expect(count).to.be.equal(expectedCount);
-            expect(asExpected).to.be.true;
-
-            expect(await contracts.usdc.balanceOf(accounts.user1.address))
-                .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(5000));
-
-            expect((await storage.getAvailableSlots()).length).to.be.equal(100 - expectedCount);
-            expect((await storage.getUsedSlots()).length).to.be.equal(expectedCount);
+            // expect((await storage.getAvailableSlots()).length).to.be.equal(100 - expectedCount);
+            // expect((await storage.getUsedSlots()).length).to.be.equal(expectedCount);
         });
 
         it("Request 2 slots", async () => {
-            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-            const expectedCount = 2;
-            const initialAvailableSlots = await storage.getAvailableSlots();
-            const initialUsedSlots = await storage.getUsedSlots();
-            const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
+            await makeDeposit(2 * SlotPrice);
 
-            expect(initialAvailableSlots.length).to.be.equal(100);
-            expect(initialUsedSlots.length).to.be.equal(0);
+            // const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            // const expectedCount = 2;
+            // const initialAvailableSlots = await storage.getAvailableSlots();
+            // const initialUsedSlots = await storage.getUsedSlots();
+            // const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
 
-            expect(initialBalance).to.be.equal(10000000);
+            // expect(initialAvailableSlots.length).to.be.equal(100);
+            // expect(initialUsedSlots.length).to.be.equal(0);
 
-            let count = 0;
-            let asExpected = false;
+            // expect(initialBalance).to.be.equal(10000000);
 
-            await contracts.usdc.on("Approval", async (owner, spender, amount) => {
-                const allowance = await usdc_user1.allowance(accounts.user1.address, await contracts.kratosx.getAddress());
+            // let count = 0;
+            // let asExpected = false;
 
-                if (allowance < 5000) {
-                    if (count == expectedCount) {
-                        asExpected = true;
-                    } else {
-                        console.log("Request 2 slots - not ok [count:", count, "]")
-                    }
-                    return;
-                }
+            // await contracts.usdc.on("Approval", async (owner, spender, amount) => {
+            //     const allowance = await usdc_user1.allowance(accounts.user1.address, await contracts.kratosx.getAddress());
 
-                ++count;
-                await expect(contracts.kratosx.approveDeposit(owner, 180))
-                    .to.emit(contracts.kratosx, "DepositApproved")
-                        .withArgs(accounts.user1.address, count);
+            //     console.log("Request 2 slots -  step 1")
+            //     if (allowance < 5000) {
+            //         console.log("Request 2 slots -  step 1.1", allowance, spender, amount)
+            //         if (count == expectedCount) {
+            //             asExpected = true;
+            //         } else {
+            //             console.log("Request 2 slots - not ok [count:", count, "]")
+            //         }
+            //         return;
+            //     }
 
-            });
+            //     console.log("Request 2 slots -  step 2")
+            //     ++count;
 
-            const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), expectedCount * 5000);
+            //     await expect(contracts.kratosx.approveDeposit(owner, 180))
+            //         .to.emit(contracts.kratosx, "DepositApproved")
+            //             .withArgs(accounts.user1.address, count);
+            //     console.log("Request 2 slots -  step 3")
 
-            await new Promise(r => setTimeout(r, 10000));
+            // });
 
-            expect(count).to.be.equal(expectedCount);
-            expect(asExpected).to.be.true;
+            // const usdc_user1 = await contracts.usdc.connect(accounts.user1);
+            // console.log("Request 2 slots -  step 0", expectedCount * 5000)
+            // await usdc_user1.approve(await contracts.kratosx.getAddress(), expectedCount * 5000);
 
-            expect(await contracts.usdc.balanceOf(accounts.user1.address))
-                .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(5000));
+            // await new Promise(r => setTimeout(r, 10000));
 
-            expect((await storage.getAvailableSlots()).length).to.be.equal(100 - expectedCount);
-            expect((await storage.getUsedSlots()).length).to.be.equal(expectedCount);
+            // expect(count).to.be.equal(expectedCount);
+            // expect(asExpected).to.be.true;
+
+            // expect(await contracts.usdc.balanceOf(accounts.user1.address))
+            //     .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(5000));
+
+            // expect((await storage.getAvailableSlots()).length).to.be.equal(100 - expectedCount);
+            // expect((await storage.getUsedSlots()).length).to.be.equal(expectedCount);
         });
 
 
         it("Request 10 slots", async () => {
-            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-            const expectedCount = 10;
-            const initialAvailableSlots = await storage.getAvailableSlots();
-            const initialUsedSlots = await storage.getUsedSlots();
-            const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
+            await makeDeposit(10 * SlotPrice);
 
-            expect(initialAvailableSlots.length).to.be.equal(100);
-            expect(initialUsedSlots.length).to.be.equal(0);
+            // const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            // const expectedCount = 10;
+            // const initialAvailableSlots = await storage.getAvailableSlots();
+            // const initialUsedSlots = await storage.getUsedSlots();
+            // const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
 
-            expect(initialBalance).to.be.equal(10000000);
+            // expect(initialAvailableSlots.length).to.be.equal(100);
+            // expect(initialUsedSlots.length).to.be.equal(0);
 
-            let count = 0;
-            let asExpected = false;
+            // expect(initialBalance).to.be.equal(10000000);
 
-            await contracts.usdc.on("Approval", async (owner, spender, amount) => {
-                const allowance = await usdc_user1.allowance(accounts.user1.address, await contracts.kratosx.getAddress());
+            // let count = 0;
+            // let asExpected = false;
 
-                if (allowance < 5000) {
-                    if (count == expectedCount) {
-                        asExpected = true;
-                    } else {
-                        console.log("Request 10 slots - not ok [count:", count, "]")
-                    }
-                    return;
-                }
+            // await contracts.usdc.on("Approval", async (owner, spender, amount) => {
+            //     const allowance = await usdc_user1.allowance(accounts.user1.address, await contracts.kratosx.getAddress());
 
-                ++count;
-                await expect(contracts.kratosx.approveDeposit(owner, 180))
-                    .to.emit(contracts.kratosx, "DepositApproved")
-                        .withArgs(accounts.user1.address, count);
+            //     if (allowance < 5000) {
+            //         if (count == expectedCount) {
+            //             asExpected = true;
+            //         } else {
+            //             console.log("Request 10 slots - not ok [count:", count, "]")
+            //         }
+            //         return;
+            //     }
 
-            });
+            //     ++count;
+            //     await expect(contracts.kratosx.approveDeposit(owner, 180))
+            //         .to.emit(contracts.kratosx, "DepositApproved")
+            //             .withArgs(accounts.user1.address, count);
 
-            const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), expectedCount * 5000);
+            // });
 
-            await new Promise(r => setTimeout(r, 10000));
+            // const usdc_user1 = await contracts.usdc.connect(accounts.user1);
+            // await usdc_user1.approve(await contracts.kratosx.getAddress(), expectedCount * 5000);
 
-            expect(count).to.be.equal(expectedCount);
-            expect(asExpected).to.be.true;
+            // await new Promise(r => setTimeout(r, 15000));
 
-            expect(await contracts.usdc.balanceOf(accounts.user1.address))
-                .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(5000));
+            // expect(count).to.be.equal(expectedCount);
+            // expect(asExpected).to.be.true;
 
-            expect((await storage.getAvailableSlots()).length).to.be.equal(100 - expectedCount);
-            expect((await storage.getUsedSlots()).length).to.be.equal(expectedCount);
+            // expect(await contracts.usdc.balanceOf(accounts.user1.address))
+            //     .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(5000));
+
+            // expect((await storage.getAvailableSlots()).length).to.be.equal(100 - expectedCount);
+            // expect((await storage.getUsedSlots()).length).to.be.equal(expectedCount);
         });
 
         it("Request 100 slots", async () => {
-            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-            const expectedCount = 100;
-            const initialAvailableSlots = await storage.getAvailableSlots();
-            const initialUsedSlots = await storage.getUsedSlots();
-            const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
+            await makeDeposit(100 * SlotPrice);
 
-            expect(initialAvailableSlots.length).to.be.equal(100);
-            expect(initialUsedSlots.length).to.be.equal(0);
+            // const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            // const expectedCount = 100;
+            // const initialAvailableSlots = await storage.getAvailableSlots();
+            // const initialUsedSlots = await storage.getUsedSlots();
+            // const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
 
-            expect(initialBalance).to.be.equal(10000000);
+            // expect(initialAvailableSlots.length).to.be.equal(100);
+            // expect(initialUsedSlots.length).to.be.equal(0);
 
-            let count = 0;
-            let asExpected = false;
+            // expect(initialBalance).to.be.equal(10000000);
 
-            await contracts.usdc.on("Approval", async (owner, spender, amount) => {
-                const allowance = await usdc_user1.allowance(accounts.user1.address, await contracts.kratosx.getAddress());
+            // let count = 0;
+            // let asExpected = false;
 
-                if (allowance < 5000) {
-                    if (count == expectedCount) {
-                        asExpected = true;
-                    } else {
-                        console.log("Request 100 slots - not ok [count:", count, "]")
-                    }
-                    return;
-                }
+            // await contracts.usdc.on("Approval", async (owner, spender, amount) => {
+            //     const allowance = await usdc_user1.allowance(accounts.user1.address, await contracts.kratosx.getAddress());
 
-                ++count;
-                await expect(contracts.kratosx.approveDeposit(owner, 180))
-                    .to.emit(contracts.kratosx, "DepositApproved")
-                        .withArgs(accounts.user1.address, count);
+            //     if (allowance < 5000) {
+            //         if (count == expectedCount) {
+            //             asExpected = true;
+            //         } else {
+            //             console.log("Request 100 slots - not ok [count:", count, "]")
+            //         }
+            //         return;
+            //     }
 
-            });
+            //     ++count;
+            //     await expect(contracts.kratosx.approveDeposit(owner, 180))
+            //         .to.emit(contracts.kratosx, "DepositApproved")
+            //             .withArgs(accounts.user1.address, count);
 
-            const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), expectedCount * 5000);
+            // });
 
-            await new Promise(r => setTimeout(r, 10000));
+            // const usdc_user1 = await contracts.usdc.connect(accounts.user1);
+            // await usdc_user1.approve(await contracts.kratosx.getAddress(), expectedCount * 5000);
 
-            expect(count).to.be.equal(expectedCount);
-            expect(asExpected).to.be.true;
+            // await new Promise(r => setTimeout(r, 10000));
 
-            expect(await contracts.usdc.balanceOf(accounts.user1.address))
-                .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(5000));
+            // expect(count).to.be.equal(expectedCount);
+            // expect(asExpected).to.be.true;
 
-            expect((await storage.getAvailableSlots()).length).to.be.equal(100 - expectedCount);
-            expect((await storage.getUsedSlots()).length).to.be.equal(expectedCount);
+            // expect(await contracts.usdc.balanceOf(accounts.user1.address))
+            //     .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(5000));
+
+            // expect((await storage.getAvailableSlots()).length).to.be.equal(100 - expectedCount);
+            // expect((await storage.getUsedSlots()).length).to.be.equal(expectedCount);
         });
 
         it("Request 101 slots", async () => {
-            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-            const expectedCount = 100;
-            const attemptCounts = 101;
-            const initialAvailableSlots = await storage.getAvailableSlots();
-            const initialUsedSlots = await storage.getUsedSlots();
-            const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
+            try {
 
-            expect(initialAvailableSlots.length).to.be.equal(100);
-            expect(initialUsedSlots.length).to.be.equal(0);
+                await makeDeposit(101 * SlotPrice);
+                expect(false).to.be.true;
+            } catch(e) {
+                expect(e.message).to.be.equal("VM Exception while processing transaction: reverted with reason string 'No slots available.'")
+            }
 
-            expect(initialBalance).to.be.equal(10000000);
+            // const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            // const expectedCount = 100;
+            // const attemptCounts = 101;
+            // const initialAvailableSlots = await storage.getAvailableSlots();
+            // const initialUsedSlots = await storage.getUsedSlots();
+            // const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
 
-            let count = 0;
-            let asExpected = false;
+            // expect(initialAvailableSlots.length).to.be.equal(100);
+            // expect(initialUsedSlots.length).to.be.equal(0);
 
-            await contracts.usdc.on("Approval", async (owner, spender, amount) => {
-                const allowance = await usdc_user1.allowance(accounts.user1.address, await contracts.kratosx.getAddress());
+            // expect(initialBalance).to.be.equal(10000000);
 
-                if (allowance < 5000) {
-                    if (count == attemptCounts) {
-                        console.log("Request 101 slots - ok");
-                        asExpected = true;
-                    } else {
-                        console.log("Request 101 slots - not ok [count:", count, "]")
-                    }
-                    return;
-                }
+            // let count = 0;
+            // let asExpected = false;
 
-                ++count;
-                console.log("Request 101 slots - making deposit", count, allowance);
-                try {
-                    await expect(contracts.kratosx.approveDeposit(owner, 180))
-                        .to.emit(contracts.kratosx, "DepositApproved")
-                            .withArgs(accounts.user1.address, count);
-                } catch(e) {
-                    if (count == attemptCounts) {
-                        asExpected = true;
-                        console.log("Request 101 slots - ok (by exception)");
-                        return;
-                    }
-                    console.log("got an exception when trying to approve a deposit")
-                }
+            // await contracts.usdc.on("Approval", async (owner, spender, amount) => {
+            //     const allowance = await usdc_user1.allowance(accounts.user1.address, await contracts.kratosx.getAddress());
 
-            });
+            //     if (allowance < 5000) {
+            //         if (count == attemptCounts) {
+            //             console.log("Request 101 slots - ok");
+            //             asExpected = true;
+            //         } else {
+            //             console.log("Request 101 slots - not ok [count:", count, "]")
+            //         }
+            //         return;
+            //     }
 
-            const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), attemptCounts * 5000);
+            //     ++count;
+            //     console.log("Request 101 slots - making deposit", count, allowance);
+            //     try {
+            //         await expect(contracts.kratosx.approveDeposit(owner, 180))
+            //             .to.emit(contracts.kratosx, "DepositApproved")
+            //                 .withArgs(accounts.user1.address, count);
+            //     } catch(e) {
+            //         if (count == attemptCounts) {
+            //             asExpected = true;
+            //             console.log("Request 101 slots - ok (by exception)");
+            //             return;
+            //         }
+            //         console.log("got an exception when trying to approve a deposit")
+            //     }
 
-            await new Promise(r => setTimeout(r, 11000));
+            // });
 
-            expect(count).to.be.equal(attemptCounts);
-            expect(asExpected).to.be.true;
+            // const usdc_user1 = await contracts.usdc.connect(accounts.user1);
+            // await usdc_user1.approve(await contracts.kratosx.getAddress(), attemptCounts * 5000);
 
-            expect(await contracts.usdc.balanceOf(accounts.user1.address))
-                .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(5000));
+            // await new Promise(r => setTimeout(r, 11000));
 
-            expect((await storage.getAvailableSlots()).length).to.be.equal(0);
-            expect((await storage.getUsedSlots()).length).to.be.equal(100);
+            // expect(count).to.be.equal(attemptCounts);
+            // expect(asExpected).to.be.true;
+
+            // expect(await contracts.usdc.balanceOf(accounts.user1.address))
+            //     .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(5000));
+
+            // expect((await storage.getAvailableSlots()).length).to.be.equal(0);
+            // expect((await storage.getUsedSlots()).length).to.be.equal(100);
         });
 
     });
@@ -679,7 +728,9 @@ describe("KratosX basic testing", function () {
         it("Request withdrawal without a deposit", async () => {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
 
-            await expect(contracts.kratosx.requestWithdrawal(1)).to.be.revertedWith("Item not found in collection");
+            await expect(contracts.kratosx.requestWithdrawal(1))
+                .to.be.revertedWithCustomError(contracts.kratosx, "DepositNotFound")
+                    .withArgs(1);
         });
 
         it("Request withdrawal right after deposit", async () => {
