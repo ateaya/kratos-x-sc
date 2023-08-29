@@ -18,37 +18,36 @@ error DepositNotFound(uint256 id);
 
 contract KratosX is Pausable, Ownable
 {
-    event DepositRequested(uint256 id, address from);
-    event DepositApproved(address owner, uint256 id);
-    event DepositRejected(uint256 id);
-    event WithdrawRequested(uint256 id, uint256 estimatedAmount);
-    event WithdrawExecuted(uint256 id, uint256 calculatedAmount);
+    event DepositRequested(uint16 id, address from);
+    event DepositApproved(address owner, uint16 id);
+    event DepositRejected(uint16 id);
+    event WithdrawRequested(uint16 id, uint256 estimatedAmount);
+    event WithdrawExecuted(uint16 id, uint256 calculatedAmount);
 
     struct Deposit {
-        uint256 approveTimestamp;   //  timestamp when the deposit was created
-        uint256 predictedYield;     //  the predicted/calculated yield at specific time
-        uint256 lockingPeriod;      //  locking period
-        address owner;              //  the wallet that baught this slot
-        uint8 id;                   //  deposit id
+        uint16 id;                   //  deposit id
+        address owner;               //  the wallet that baught this slot
+        uint32 approveTimestamp;     //  timestamp when the deposit was created
+        uint32 lockingPeriod;        //  locking period
         bool hasEarlyAdoptBonus;
         bool hasExtendPeriodBonus;
     }
 
     ERC20 immutable externalToken;      //  the address for the external token
     uint256 immutable slotValue;        //  the value of each deposit slot
-    uint256 earlyAdoptBonus;            //  the amount of slots that will earn the early adoption bonus
+    uint8 immutable slotCount;        //  the value of each deposit slot
+    uint8 earlyAdoptBonus;            //  the amount of slots that will earn the early adoption bonus
 
-    Deposit[] public availableSlots;    //  free slots
-    Deposit[] public usedSlots;         //  slots occupied
+    uint16 autoIncrementedId;
+
+    Deposit[] public deposits;
 
     constructor(address token, uint256 amount, uint8 slots) Pausable() Ownable() {
         externalToken = ERC20(token);
         slotValue = amount / slots;
         earlyAdoptBonus = 3;
-
-        for (uint8 index = slots; index > 0; --index) {
-            availableSlots.push(Deposit(0, 0, 0, address(0), index, false, false));
-        }
+        slotCount = slots;
+        autoIncrementedId = 0;
     }
 
 
@@ -59,16 +58,16 @@ contract KratosX is Pausable, Ownable
      * @notice  Retrieve the available deposit slots.
      * @dev     Returns a list with the available deposit slots.
      */
-    function getAvailableSlots() external view returns(Deposit [] memory) {
-        return availableSlots;
+    function getAvailableSlotCount() external view returns(uint256) {
+        return slotCount - deposits.length;
     }
 
     /**
      * @notice  Retrieve the used deposit slots.
      * @dev     Returns a list with the used deposit slots.
      */
-    function getUsedSlots() external view returns(Deposit [] memory) {
-        return usedSlots;
+    function getUsedSlots() external view returns(Deposit[] memory) {
+        return deposits;
     }
 
     /**
@@ -80,29 +79,17 @@ contract KratosX is Pausable, Ownable
      * @param   depositor  The depositor wallet address on the external token.
      * @param   lockPeriod  The predicted locking period.
      */
-    function approveDeposit(address depositor, uint256 lockPeriod) external onlyOwner {
-        require(availableSlots.length > 0, "No slots available.");
+    function approveDeposit(address depositor, uint32 lockPeriod) external onlyOwner {
+        require(deposits.length < slotCount, "No slots available.");
 
         // make the value transfer from the depositer account
         externalToken.transferFrom(depositor, owner(), slotValue);
 
-        //  move the deposit to the proper list and get the deposit
-        Deposit storage deposit = _moveLastSlot(availableSlots, usedSlots);
-        deposit.owner = depositor;
-        deposit.lockingPeriod = lockPeriod;
-        deposit.approveTimestamp = block.timestamp;
+        uint16 id = _createDepositId();
 
-        //  check if this deposit has early access bonus
-        if (earlyAdoptBonus > 0) {
-            --earlyAdoptBonus;
-            deposit.hasEarlyAdoptBonus = true;
-        }
+        deposits.push(Deposit(id, depositor, uint32(block.timestamp), lockPeriod, _hasEarlyAdoptionBonus(), false));
 
-        //  calculate predicted yield
-        deposit.predictedYield = calculateYield(slotValue, deposit.lockingPeriod, deposit.hasEarlyAdoptBonus, false);
-
-        //  notify that the deposit was approved successfuly
-        emit DepositApproved(depositor, deposit.id);
+        emit DepositApproved(depositor, id);
     }
 
     /**
@@ -112,7 +99,7 @@ contract KratosX is Pausable, Ownable
      * @dev     Call this function by the backend when the deposit was not accepted.
      * @param   id  The id of the deposit to reject.
      */
-    function rejectDeposit(uint256 id) external onlyOwner {
+    function rejectDeposit(uint16 id) external onlyOwner {
         emit DepositRejected(id);
     }
 
@@ -124,8 +111,8 @@ contract KratosX is Pausable, Ownable
      * @dev     The user may call this function to request a withdraw before the stipulated locking period.
      * @param   id  The id of the deposit to withdraw.
      */
-    function requestWithdrawal(uint256 id) external whenNotPaused {
-        Deposit memory deposit = usedSlots[_findSlotInCollection(usedSlots, id)];
+    function requestWithdrawal(uint16 id) external whenNotPaused {
+        Deposit memory deposit = _getDepositById(id);
 
         // account for 7 days of withdrawal time
         uint256 dayCount = _timestampInDays(block.timestamp + 7 days - deposit.approveTimestamp);
@@ -141,22 +128,19 @@ contract KratosX is Pausable, Ownable
      * @dev     Called by the backend to liquidate the deposit.
      * @param   id  The id of the deposit to liquidate.
      */
-    function executeWithdraw(uint256 id) external onlyOwner {
-        Deposit storage deposit = _moveSlot(usedSlots, availableSlots, id);
+    function executeWithdraw(uint16 id) external onlyOwner {
+        Deposit[] memory depositsInMemory = deposits;
+        uint256 depositIndex = _findDeposit(depositsInMemory, id);
+        Deposit memory deposit = depositsInMemory[depositIndex];
+
         uint256 dayCount = _timestampInDays(block.timestamp - deposit.approveTimestamp);
         uint256 calculatedYield = calculateYield(slotValue, dayCount, deposit.hasEarlyAdoptBonus, deposit.hasExtendPeriodBonus);
         uint256 calculatedValue = slotValue + calculatedYield;
 
-        require(externalToken.balanceOf(owner()) > calculatedValue, "Not enough liquidity in account");
-
         externalToken.transferFrom(owner(), deposit.owner, calculatedValue);
 
-        deposit.owner = address(0);
-        deposit.hasEarlyAdoptBonus = false;
-        deposit.hasExtendPeriodBonus = false;
-        deposit.lockingPeriod = 0;
-        deposit.predictedYield = 0;
-        deposit.approveTimestamp = 0;
+        deposits[depositIndex] = depositsInMemory[depositsInMemory.length - 1];
+        deposits.pop();
 
         emit WithdrawExecuted(id, calculatedValue);
     }
@@ -234,33 +218,38 @@ contract KratosX is Pausable, Ownable
         return value;
     }
 
+    function _createDepositId() private returns(uint16) {
+        return ++autoIncrementedId;
+    }
+
+    function _hasEarlyAdoptionBonus() private returns(bool) {
+        if (earlyAdoptBonus > 0) {
+            unchecked { --earlyAdoptBonus; }
+            return true;
+        }
+        return false;
+    }
+
     function _timestampInDays(uint256 timestamp) private pure returns(uint256) {
         return timestamp / (60 * 60 * 24);
     }
 
-    function _findSlotInCollection(Deposit[] memory collection, uint256 id) private pure returns(uint256) {
-        Deposit[] memory _collection = collection;  // TODO: check why does this reduce gas
-        for(uint256 index = 0; index < _collection.length; index = _increment(index)) {
-            if(_collection[index].id == id) {
+    function _findDeposit(Deposit[] memory depositsInMemory, uint256 id) private pure returns(uint256) {
+        for (uint256 index = 0; index < depositsInMemory.length; index = _increment(index)) {
+            if (depositsInMemory[index].id == id) {
                 return index;
             }
         }
         revert DepositNotFound(id);
     }
 
-    function _moveLastSlot(Deposit[] storage from, Deposit[] storage to) private returns(Deposit storage) {
-        to.push(from[from.length - 1]);
-        from.pop();
-        return to[to.length - 1];
-    }
-
-    function _moveSlot(Deposit[] storage from, Deposit[] storage to, uint256 id) private returns(Deposit storage) {
-        uint256 index = _findSlotInCollection(from, id);
-
-        if (index < from.length - 1) {
-            from[index] = from[from.length - 1];
+    function _getDepositById(uint256 id) private view returns(Deposit memory) {
+        Deposit[] memory depositsInMemory = deposits;
+        for (uint256 index = 0; index < depositsInMemory.length; index = _increment(index)) {
+            if (depositsInMemory[index].id == id) {
+                return depositsInMemory[index];
+            }
         }
-
-        return _moveLastSlot(from, to);
+        revert DepositNotFound(id);
     }
 }
