@@ -87,7 +87,7 @@ describe("KratosX basic testing", function () {
 
         // Contract deployment
         const kratosXVaultFactory = (await ethers.getContractFactory("KratosX")).connect(accounts.kratosx);
-        const kratoXInstance = await kratosXVaultFactory.deploy(USDCInstance.getAddress(), 500000, 100);
+        const kratoXInstance = await kratosXVaultFactory.deploy(USDCInstance.getAddress());
 
         const storage = new Storage(kratoXInstance);
 
@@ -99,22 +99,26 @@ describe("KratosX basic testing", function () {
         return { contracts, accounts, storage };
     }
 
-    function calculateYield(value, days, earlyAdoptBonus, extendBonus) {
+    function calculateYield(days, earlyAdoptBonus, extendBonus) {
         let percent = calculatePercentage(days);
+
+        if (days > 1825) {
+            days = 1825;
+        }
 
         if(earlyAdoptBonus) {
             percent += 1;
         }
 
-        if(extendBonus && days > 365) {
+        if(extendBonus && days >= 365) {
             percent += 1;
         }
 
-        return BigInt(Math.floor(value * percent * days / (100 * 365)));
+        return BigInt(Math.floor(SlotPrice * percent * days / (100 * 365)));
     }
 
-    function calculateFullValue(value, days, earlyAdoptBonus, extendBonus) {
-        return BigInt(value) + calculateYield(value, days, earlyAdoptBonus, extendBonus);
+    function calculateFullValue(days, earlyAdoptBonus, extendBonus) {
+        return BigInt(SlotPrice) + calculateYield(days, earlyAdoptBonus, extendBonus);
     }
 
     async function timeWarpDays(days) {
@@ -123,17 +127,17 @@ describe("KratosX basic testing", function () {
 
 
     function calculatePercentage(days) {
-        if (days < 180) {
+        if (days <= 180) {
             return 0;
-        } else if (days < 365) {    //  < 1 year
+        } else if (days <= 365) {    //  < 1 year
             return 5;
-        } else if (days < 730) {    //  1 years < days > 2 years
+        } else if (days <= 730) {    //  1 years < days > 2 years
             return 5;
-        } else if (days < 1095) {   //  2 years < days > 3 years
+        } else if (days <= 1095) {   //  2 years < days > 3 years
             return 6;
-        } else if (days < 1460) {   //  3 years < days > 4 years
+        } else if (days <= 1460) {   //  3 years < days > 4 years
             return 7;
-        } else if (days < 1825) {   //  4 years < days > 5 years
+        } else if (days <= 1825) {   //  4 years < days > 5 years
             return 8;
         }
 
@@ -157,23 +161,23 @@ describe("KratosX basic testing", function () {
             const depositValue = 100000;
 
             async function testInterval(earlyAdoptBonus, extendBonus) {
-                let calculatedYield = await contracts.kratosx.calculateYield(depositValue, 0, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 0, earlyAdoptBonus, extendBonus));
+                let calculatedYield = await contracts.kratosx.calculateYield(0, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(0, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 30, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 30, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(30, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(30, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 60, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 60, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(60, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(60, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 90, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 90, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(90, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(90, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 179, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 179, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(179, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(179, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 180, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 180, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(180, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(180, earlyAdoptBonus, extendBonus));
             }
 
             await testInterval(false, false);
@@ -190,29 +194,29 @@ describe("KratosX basic testing", function () {
 
 
             async function testInterval(earlyAdoptBonus, extendBonus) {
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 180, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 180, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(180, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(180, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 300, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 300, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(300, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(300, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 364, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 364, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(364, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(364, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 365, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 365, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(365, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(365, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 366, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 366, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(366, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(366, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 729, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 729, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(729, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(729, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 730, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 730, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(730, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(730, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 731, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 731, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(731, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(731, earlyAdoptBonus, extendBonus));
             }
 
             await testInterval(false, false);
@@ -230,17 +234,17 @@ describe("KratosX basic testing", function () {
 
 
             async function testInterval(earlyAdoptBonus, extendBonus) {
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1093, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1093, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1093, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1093, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1094, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1094, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1094, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1094, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1095, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1095, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1095, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1095, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1096, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1096, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1096, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1096, earlyAdoptBonus, extendBonus));
             }
 
             await testInterval(false, false);
@@ -258,17 +262,17 @@ describe("KratosX basic testing", function () {
 
 
             async function testInterval(earlyAdoptBonus, extendBonus) {
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1458, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1458, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1458, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1458, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1459, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1459, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1459, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1459, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1460, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1460, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1460, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1460, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1461, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1461, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1461, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1461, earlyAdoptBonus, extendBonus));
             }
 
             await testInterval(false, false);
@@ -280,23 +284,20 @@ describe("KratosX basic testing", function () {
         it("Calculate yield below 5 years", async () => {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
 
-            const depositValue = 100000;
             let calculatedYield = 0;
 
-
-
             async function testInterval(earlyAdoptBonus, extendBonus) {
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1823, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1823, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1823, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1823, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1824, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1824, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1824, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1824, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1825, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1825, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1825, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1825, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1826, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1825, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1826, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1826, earlyAdoptBonus, extendBonus));
             }
 
             await testInterval(false, false);
@@ -314,23 +315,23 @@ describe("KratosX basic testing", function () {
 
 
             async function testInterval(earlyAdoptBonus, extendBonus) {
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1825, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1825, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1825, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1825, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1826, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1825, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1826, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1826, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1827, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1825, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1827, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1826, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 1828, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1825, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(1828, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1826, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 5000, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1825, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(5000, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1826, earlyAdoptBonus, extendBonus));
 
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 10000, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 1825, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(10000, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(1826, earlyAdoptBonus, extendBonus));
             }
 
             await testInterval(false, false);
@@ -347,8 +348,8 @@ describe("KratosX basic testing", function () {
 
 
             async function testInterval(earlyAdoptBonus, extendBonus) {
-                calculatedYield = await contracts.kratosx.calculateYield(depositValue, 0, earlyAdoptBonus, extendBonus);
-                expect(calculatedYield).to.be.equal(calculateYield(depositValue, 0, earlyAdoptBonus, extendBonus));
+                calculatedYield = await contracts.kratosx.calculateYield(0, earlyAdoptBonus, extendBonus);
+                expect(calculatedYield).to.be.equal(calculateYield(0, earlyAdoptBonus, extendBonus));
             }
 
             await testInterval(false, false);
@@ -356,7 +357,7 @@ describe("KratosX basic testing", function () {
             await testInterval(true, false);
             await testInterval(true, true);
 
-            // await expect(contracts.kratosx.calculateYield(depositValue, -1)).to.be.revertedWith("value out-of-bounds");
+            // await expect(contracts.kratosx.calculateYield(-1)).to.be.revertedWith("value out-of-bounds");
         });
     });
 
@@ -451,13 +452,13 @@ describe("KratosX basic testing", function () {
 
             days += 7
 
-            if (days > 1825) {
-                days = 1825
+            if (days > 1826) {
+                days = 1826
             }
 
             await expect(contracts.kratosx.requestWithdrawal(1))
                 .to.emit(contracts.kratosx, "WithdrawRequested")
-                    .withArgs(1, calculateFullValue(5000, days, true, false));
+                    .withArgs(1, calculateFullValue(days, true, false));
         }
 
         it("Request withdrawal without a deposit", async () => {
@@ -574,7 +575,7 @@ describe("KratosX basic testing", function () {
 
             await contracts.kratosx.executeWithdraw(1);
 
-            const calcYield = calculateYield(5000, 1300, true, false);
+            const calcYield = calculateYield(1300, true, false);
 
             expect(await contracts.usdc.balanceOf(accounts.user1.address))
                 .to.be.equal(user1InitialBalance + calcYield);
