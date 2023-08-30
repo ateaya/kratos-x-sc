@@ -77,7 +77,7 @@ contract KratosX is Pausable, Ownable
      * @param   depositor  The depositor wallet address on the external token.
      * @param   lockPeriod  The predicted locking period.
      */
-    function approveDeposit(address depositor, uint256 lockPeriod) external onlyOwner {
+    function approveDeposit(address depositor, uint256 lockPeriod) external onlyOwner whenNotPaused {
         require(deposits.length < slotCount, "No slots available.");
 
         // make the value transfer from the depositer account
@@ -126,7 +126,7 @@ contract KratosX is Pausable, Ownable
      * @dev     Called by the backend to liquidate the deposit.
      * @param   id  The id of the deposit to liquidate.
      */
-    function executeWithdraw(uint256 id) external onlyOwner {
+    function executeWithdraw(uint256 id) external onlyOwner whenNotPaused {
         Deposit[] memory depositsInMemory = deposits;
         uint256 depositIndex = _findDeposit(depositsInMemory, id);
         Deposit memory deposit = depositsInMemory[depositIndex];

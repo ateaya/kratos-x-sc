@@ -12,6 +12,7 @@ import { Mutex } from "async-mutex";
 import { BaseContract } from "ethers";
 import { string } from "hardhat/internal/core/params/argumentTypes";
 const helpers = require("@nomicfoundation/hardhat-network-helpers");
+import "@nomicfoundation/hardhat-chai-matchers";
 
 const SlotPrice = 5000;
 
@@ -50,28 +51,28 @@ class Storage {
             }
         });
     }
-    async getAt(pointer: int) {
+    async getAt(pointer: number): Promise<number> {
         return await helpers.getStorageAt(this.contract.target, pointer);
     }
-    async getInt(pointer: int) {
+    async getInt(pointer: number): Promise<number> {
         return parseInt(await helpers.getStorageAt(this.contract.target, pointer));
     }
-    async getBool(pointer: int) {
+    async getBool(pointer: number): Promise<boolean> {
         return parseInt(await helpers.getStorageAt(this.contract.target, pointer)) == 1;
     }
 
 
-    async getTotalAmount(): int {
-        return this.getInt(1);
+    async getTotalAmount(): Promise<number> {
+        return await this.getInt(1);
     }
-    async getSlotCount(): int {
-        return this.getInt(2);
+    async getSlotCount(): Promise<number> {
+        return await this.getInt(2);
     }
-    async getSlotValue(): int {
-        return this.getInt(3);
+    async getSlotValue(): Promise<number> {
+        return await this.getInt(3);
     }
-    async getEarlyAdoptBonus(): int {
-        return this.getInt(4);
+    async getEarlyAdoptBonus(): Promise<number> {
+        return await this.getInt(4);
     }
 
 }
@@ -394,6 +395,18 @@ describe("KratosX basic testing", function () {
 
         }
 
+        timeWarpDays = async (days) => {
+            await ethers.provider.send("evm_increaseTime", [days * 24 * 60 * 60]);
+        }
+
+        getInitialValidationData = async (): Promise<ValidationData> => {
+            return {
+                initialAvailableSlotCount: await this.contracts.kratosx.getAvailableSlotCount(),
+                initialDeposits: await this.contracts.kratosx.getUsedSlots(),
+                initialBalance: await this.contracts.usdc.balanceOf(this.accounts.user1.address),
+            }
+        }
+
         requestDeposit = async (user, value, signer = user) => {
             const kratosContractAddress = await this.contracts.kratosx.getAddress();
             const contract = await this.contracts.usdc.connect(signer);
@@ -409,9 +422,7 @@ describe("KratosX basic testing", function () {
 
         approveDeposit = async (user) => {
             if (this.valueChecks) {
-                this.validationData.initialAvailableSlotCount = await this.contracts.kratosx.getAvailableSlotCount();
-                this.validationData.initialDeposits = await this.contracts.kratosx.getUsedSlots();
-                this.validationData.initialBalance = await this.contracts.usdc.balanceOf(this.accounts.user1.address);
+                this.validationData = await this.getInitialValidationData();
             }
 
             await expect(this.contracts.kratosx.approveDeposit(user.address, 180))
@@ -432,9 +443,7 @@ describe("KratosX basic testing", function () {
         approveDepositRegularUser = async (user, signer) => {
 
             if (this.valueChecks) {
-                this.validationData.initialAvailableSlotCount = await this.contracts.kratosx.getAvailableSlotCount();
-                this.validationData.initialDeposits = await this.contracts.kratosx.getUsedSlots();
-                this.validationData.initialBalance = await this.contracts.usdc.balanceOf(this.accounts.user1.address);
+                this.validationData = await this.getInitialValidationData();
             }
 
             const contract = await this.contracts.kratosx.connect(signer);
@@ -455,9 +464,7 @@ describe("KratosX basic testing", function () {
 
         rejectDeposit = async (user) => {
             if (this.valueChecks) {
-                this.validationData.initialAvailableSlotCount = await this.contracts.kratosx.getAvailableSlotCount();
-                this.validationData.initialDeposits = await this.contracts.kratosx.getUsedSlots();
-                this.validationData.initialBalance = await this.contracts.usdc.balanceOf(this.accounts.user1.address);
+                this.validationData = await this.getInitialValidationData();
             }
 
             await expect(this.contracts.kratosx.rejectDeposit(user.address))
@@ -477,9 +484,7 @@ describe("KratosX basic testing", function () {
 
         rejectDepositRegularUser = async (user, signer) => {
             if (this.valueChecks) {
-                this.validationData.initialAvailableSlotCount = await this.contracts.kratosx.getAvailableSlotCount();
-                this.validationData.initialDeposits = await this.contracts.kratosx.getUsedSlots();
-                this.validationData.initialBalance = await this.contracts.usdc.balanceOf(this.accounts.user1.address);
+                this.validationData = await this.getInitialValidationData();
             }
 
             const contract = await this.contracts.kratosx.connect(signer);
@@ -504,15 +509,12 @@ describe("KratosX basic testing", function () {
         const { contracts, accounts, storage } = await loadFixture(initEnvironment);
         const helpers = new Helpers(contracts, accounts);
         const expectedCount = Number(amount / SlotPrice);
-        const initialAvailableSlotCount = await contracts.kratosx.getAvailableSlotCount();
-        const initialDeposits = await contracts.kratosx.getUsedSlots();
-        const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
+        const validationData: ValidationData = await helpers.getInitialValidationData()
         const kratosContractAddress = await contracts.kratosx.getAddress();
 
-        expect(initialAvailableSlotCount).to.be.equal(100);
-        expect(initialDeposits.length).to.be.equal(0);
-
-        expect(initialBalance).to.be.equal(10000000);
+        expect(validationData.initialAvailableSlotCount).to.be.equal(100);
+        expect(validationData.initialDeposits.length).to.be.equal(0);
+        expect(validationData.initialBalance).to.be.equal(10000000);
 
         await helpers.requestDeposit(accounts.user1, amount);
 
@@ -530,7 +532,7 @@ describe("KratosX basic testing", function () {
         expect(slotId).to.be.equal(expectedCount);
 
         expect(await contracts.usdc.balanceOf(accounts.user1.address))
-            .to.be.equal(BigInt(initialBalance) - BigInt(expectedCount) * BigInt(SlotPrice));
+            .to.be.equal(BigInt(validationData.initialBalance) - BigInt(expectedCount) * BigInt(SlotPrice));
 
         expect((await contracts.kratosx.getAvailableSlotCount())).to.be.equal(100 - expectedCount);
         const deposits = await contracts.kratosx.getUsedSlots();
@@ -541,21 +543,12 @@ describe("KratosX basic testing", function () {
     async function rejectDeposit(amount, useRegularUser = false) {
         const { contracts, accounts, storage } = await loadFixture(initEnvironment);
         const helpers = new Helpers(contracts, accounts);
-        const expectedCount = Number(amount / SlotPrice);
-        const initialAvailableSlotCount = await contracts.kratosx.getAvailableSlotCount();
-        const initialDeposits = await contracts.kratosx.getUsedSlots();
-        const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
-        const kratosContractAddress = await contracts.kratosx.getAddress();
+        const validationData: ValidationData = await helpers.getInitialValidationData()
 
-        expect(initialAvailableSlotCount).to.be.equal(100);
-        expect(initialDeposits.length).to.be.equal(0);
+        expect(validationData.initialAvailableSlotCount).to.be.equal(100);
+        expect(validationData.initialDeposits.length).to.be.equal(0);
+        expect(validationData.initialBalance).to.be.equal(10000000);
 
-        expect(initialBalance).to.be.equal(10000000);
-
-        // const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-        // await expect(usdc_user1.approve(kratosContractAddress, expectedCount * SlotPrice))
-        //     .to.emit(contracts.usdc, "Approval")
-        //     .withArgs(accounts.user1.address, kratosContractAddress, expectedCount * SlotPrice);
         await helpers.requestDeposit(accounts.user1, amount);
 
         if (useRegularUser) {
@@ -564,21 +557,12 @@ describe("KratosX basic testing", function () {
             await helpers.rejectDeposit(accounts.user1);
         }
 
-        // if (useRegularUser) {
-        //     await expect(contracts.kratosx.connect(accounts.user1).rejectDeposit(accounts.user1.address))
-        //         .to.revertedWith("Ownable: caller is not the owner");
-        // } else {
-        //     await expect(contracts.kratosx.rejectDeposit(accounts.user1.address))
-        //     .to.emit(contracts.kratosx, "DepositRejected")
-        //         .withArgs(accounts.user1.address);
-        // }
-
         expect(await contracts.usdc.balanceOf(accounts.user1.address))
-            .to.be.equal(BigInt(initialBalance));
+            .to.be.equal(BigInt(validationData.initialBalance));
 
-        expect((await contracts.kratosx.getAvailableSlotCount())).to.be.equal(initialAvailableSlotCount);
+        expect((await contracts.kratosx.getAvailableSlotCount())).to.be.equal(validationData.initialAvailableSlotCount);
         const deposits = await contracts.kratosx.getUsedSlots();
-        expect(deposits.length).to.be.equal(initialDeposits.length);
+        expect(deposits.length).to.be.equal(validationData.initialDeposits.length);
     }
 
     describe("Requesting slots", () => {
@@ -645,10 +629,10 @@ describe("KratosX basic testing", function () {
 
             await timeWarpDays(days);
 
-            days += 7
+            days += 7;
 
             if (days > 1826) {
-                days = 1826
+                days = 1826;
             }
 
             await expect(contracts.kratosx.requestWithdrawal(1))
