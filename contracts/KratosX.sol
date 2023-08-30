@@ -20,7 +20,7 @@ contract KratosX is Pausable, Ownable
 {
     event DepositRequested(uint256 id, address from);
     event DepositApproved(address owner, uint256 id);
-    event DepositRejected(uint256 id);
+    event DepositRejected(address depositor);
     event WithdrawRequested(uint256 id, uint256 estimatedAmount);
     event WithdrawExecuted(uint256 id, uint256 calculatedAmount);
 
@@ -95,10 +95,10 @@ contract KratosX is Pausable, Ownable
      * if the user didn't complete the information required to generate the writen contract. This is the function
      * that should be called in this situation.
      * @dev     Call this function by the backend when the deposit was not accepted.
-     * @param   id  The id of the deposit to reject.
+     * @param   depositor  The depositor wallet address on the external token.
      */
-    function rejectDeposit(uint256 id) external onlyOwner {
-        emit DepositRejected(id);
+    function rejectDeposit(address depositor) external onlyOwner {
+        emit DepositRejected(depositor);
     }
 
     /**

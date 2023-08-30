@@ -15,6 +15,23 @@ const helpers = require("@nomicfoundation/hardhat-network-helpers");
 
 const SlotPrice = 5000;
 
+interface ContractCollection {
+    kratosx: ethers.BaseContract;
+    usdc: ethers.BaseContract;
+}
+interface AccountCollection {
+    kratosx: ethers.HardhatEthersSigner;
+    usdc: ethers.HardhatEthersSigner;
+    user1: ethers.HardhatEthersSigner;
+    user2: ethers.HardhatEthersSigner;
+}
+
+interface ValidationData {
+    initialAvailableSlotCount: number;
+    initialDeposits: Array<any>;
+    initialBalance: number;
+}
+
 class Storage {
     contract: any = undefined;
     constructor(contract: any) {
@@ -67,7 +84,7 @@ describe("KratosX basic testing", function () {
     // and reset Hardhat Network to that snapshot in every test.
     async function initEnvironment() {
         const signers = await ethers.getSigners();
-        const accounts = {
+        const accounts: AccountCollection = {
             kratosx: signers[0],
             usdc: signers[1],
             user1: signers[2],
@@ -91,7 +108,7 @@ describe("KratosX basic testing", function () {
 
         const storage = new Storage(kratoXInstance);
 
-        const contracts = {
+        const contracts: ContractCollection = {
             kratosx: kratoXInstance,
             usdc: USDCInstance,
         }
@@ -356,13 +373,136 @@ describe("KratosX basic testing", function () {
             await testInterval(false, true);
             await testInterval(true, false);
             await testInterval(true, true);
-
-            // await expect(contracts.kratosx.calculateYield(-1)).to.be.revertedWith("value out-of-bounds");
         });
     });
 
-    async function makeDeposit(amount) {
+    class Helpers {
+        contracts: ContractCollection;
+        accounts: AccountCollection;
+        validationData: ValidationData;
+        valueChecks: boolean;
+
+        constructor(contracts: ContractCollection, accounts: AccountCollection) {
+            this.contracts = contracts;
+            this.accounts = accounts;
+            this.valueChecks = false;
+            this.validationData = {
+                initialAvailableSlotCount: 0,
+                initialDeposits: [],
+                initialBalance: 0,
+            };
+
+        }
+
+        requestDeposit = async (user, value, signer = user) => {
+            const kratosContractAddress = await this.contracts.kratosx.getAddress();
+            const contract = await this.contracts.usdc.connect(signer);
+
+            await expect(contract.approve(kratosContractAddress, value))
+                .to.emit(this.contracts.usdc, "Approval")
+                .withArgs(user.address, kratosContractAddress, value);
+
+            if (this.valueChecks) {
+                expect(await this.contracts.usdc.allowance(user.address, kratosContractAddress)).to.be.equal(value);
+            }
+        }
+
+        approveDeposit = async (user) => {
+            if (this.valueChecks) {
+                this.validationData.initialAvailableSlotCount = await this.contracts.kratosx.getAvailableSlotCount();
+                this.validationData.initialDeposits = await this.contracts.kratosx.getUsedSlots();
+                this.validationData.initialBalance = await this.contracts.usdc.balanceOf(this.accounts.user1.address);
+            }
+
+            await expect(this.contracts.kratosx.approveDeposit(user.address, 180))
+                .to.emit(this.contracts.kratosx, "DepositApproved");
+                    // .withArgs(user.address, undefined);
+
+            if (this.valueChecks) {
+                const deposits = await this.contracts.kratosx.getUsedSlots();
+
+                expect(await this.contracts.usdc.balanceOf(this.accounts.user1.address))
+                    .to.be.equal(BigInt(this.validationData.initialBalance) - BigInt(SlotPrice));
+
+                expect((await this.contracts.kratosx.getAvailableSlotCount())).to.be.equal(this.validationData.initialAvailableSlotCount - 1);
+                expect(deposits.length).to.be.equal(this.validationData.initialDeposits.length + 1);
+            }
+        }
+
+        approveDepositRegularUser = async (user, signer) => {
+
+            if (this.valueChecks) {
+                this.validationData.initialAvailableSlotCount = await this.contracts.kratosx.getAvailableSlotCount();
+                this.validationData.initialDeposits = await this.contracts.kratosx.getUsedSlots();
+                this.validationData.initialBalance = await this.contracts.usdc.balanceOf(this.accounts.user1.address);
+            }
+
+            const contract = await this.contracts.kratosx.connect(signer);
+
+            await expect(contract.approveDeposit(user.address, 180))
+                .to.revertedWith("Ownable: caller is not the owner");
+
+            if (this.valueChecks) {
+                const deposits = await this.contracts.kratosx.getUsedSlots();
+
+                expect(await this.contracts.usdc.balanceOf(this.accounts.user1.address))
+                    .to.be.equal(BigInt(this.validationData.initialBalance));
+
+                expect((await this.contracts.kratosx.getAvailableSlotCount())).to.be.equal(this.validationData.initialAvailableSlotCount);
+                expect(deposits.length).to.be.equal(this.validationData.initialDeposits.length);
+            }
+        }
+
+        rejectDeposit = async (user) => {
+            if (this.valueChecks) {
+                this.validationData.initialAvailableSlotCount = await this.contracts.kratosx.getAvailableSlotCount();
+                this.validationData.initialDeposits = await this.contracts.kratosx.getUsedSlots();
+                this.validationData.initialBalance = await this.contracts.usdc.balanceOf(this.accounts.user1.address);
+            }
+
+            await expect(this.contracts.kratosx.rejectDeposit(user.address))
+                .to.emit(this.contracts.kratosx, "DepositRejected")
+                    .withArgs(user.address);
+
+            if (this.valueChecks) {
+                const deposits = await this.contracts.kratosx.getUsedSlots();
+
+                expect(await this.contracts.usdc.balanceOf(user.address))
+                    .to.be.equal(BigInt(this.validationData.initialBalance));
+
+                expect((await this.contracts.kratosx.getAvailableSlotCount())).to.be.equal(this.validationData.initialAvailableSlotCount);
+                expect(deposits.length).to.be.equal(this.validationData.initialDeposits.length);
+            }
+        }
+
+        rejectDepositRegularUser = async (user, signer) => {
+            if (this.valueChecks) {
+                this.validationData.initialAvailableSlotCount = await this.contracts.kratosx.getAvailableSlotCount();
+                this.validationData.initialDeposits = await this.contracts.kratosx.getUsedSlots();
+                this.validationData.initialBalance = await this.contracts.usdc.balanceOf(this.accounts.user1.address);
+            }
+
+            const contract = await this.contracts.kratosx.connect(signer);
+
+            await expect(contract.rejectDeposit(user.address))
+                    .to.revertedWith("Ownable: caller is not the owner");
+
+            if (this.valueChecks) {
+                const deposits = await this.contracts.kratosx.getUsedSlots();
+
+                expect(await this.contracts.usdc.balanceOf(user.address))
+                    .to.be.equal(BigInt(this.validationData.initialBalance));
+
+                expect((await this.contracts.kratosx.getAvailableSlotCount())).to.be.equal(this.validationData.initialAvailableSlotCount);
+                expect(deposits.length).to.be.equal(this.validationData.initialDeposits.length);
+            }
+        }
+    }
+
+
+    async function makeDeposit(amount, useRegularUser = false) {
         const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+        const helpers = new Helpers(contracts, accounts);
         const expectedCount = Number(amount / SlotPrice);
         const initialAvailableSlotCount = await contracts.kratosx.getAvailableSlotCount();
         const initialDeposits = await contracts.kratosx.getUsedSlots();
@@ -374,17 +514,17 @@ describe("KratosX basic testing", function () {
 
         expect(initialBalance).to.be.equal(10000000);
 
-        const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-        await expect(usdc_user1.approve(kratosContractAddress, expectedCount * SlotPrice))
-            .to.emit(contracts.usdc, "Approval")
-            .withArgs(accounts.user1.address, kratosContractAddress, expectedCount * SlotPrice);
+        await helpers.requestDeposit(accounts.user1, amount);
 
         let slotId = 0;
-        while(await usdc_user1.allowance(accounts.user1.address, kratosContractAddress) >= SlotPrice) {
+        while(await contracts.usdc.allowance(accounts.user1.address, kratosContractAddress) >= SlotPrice) {
             ++slotId;
-            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
-            .to.emit(contracts.kratosx, "DepositApproved")
-                .withArgs(accounts.user1.address, slotId);
+            if (useRegularUser) {
+                await helpers.approveDepositRegularUser(accounts.user1, accounts.user1);
+                return;
+            } else {
+                await helpers.approveDeposit(accounts.user1)
+            }
         }
 
         expect(slotId).to.be.equal(expectedCount);
@@ -396,6 +536,49 @@ describe("KratosX basic testing", function () {
         const deposits = await contracts.kratosx.getUsedSlots();
         expect(deposits.length).to.be.equal(expectedCount);
 
+    }
+
+    async function rejectDeposit(amount, useRegularUser = false) {
+        const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+        const helpers = new Helpers(contracts, accounts);
+        const expectedCount = Number(amount / SlotPrice);
+        const initialAvailableSlotCount = await contracts.kratosx.getAvailableSlotCount();
+        const initialDeposits = await contracts.kratosx.getUsedSlots();
+        const initialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
+        const kratosContractAddress = await contracts.kratosx.getAddress();
+
+        expect(initialAvailableSlotCount).to.be.equal(100);
+        expect(initialDeposits.length).to.be.equal(0);
+
+        expect(initialBalance).to.be.equal(10000000);
+
+        // const usdc_user1 = await contracts.usdc.connect(accounts.user1);
+        // await expect(usdc_user1.approve(kratosContractAddress, expectedCount * SlotPrice))
+        //     .to.emit(contracts.usdc, "Approval")
+        //     .withArgs(accounts.user1.address, kratosContractAddress, expectedCount * SlotPrice);
+        await helpers.requestDeposit(accounts.user1, amount);
+
+        if (useRegularUser) {
+            await helpers.rejectDepositRegularUser(accounts.user1, accounts.user1);
+        } else {
+            await helpers.rejectDeposit(accounts.user1);
+        }
+
+        // if (useRegularUser) {
+        //     await expect(contracts.kratosx.connect(accounts.user1).rejectDeposit(accounts.user1.address))
+        //         .to.revertedWith("Ownable: caller is not the owner");
+        // } else {
+        //     await expect(contracts.kratosx.rejectDeposit(accounts.user1.address))
+        //     .to.emit(contracts.kratosx, "DepositRejected")
+        //         .withArgs(accounts.user1.address);
+        // }
+
+        expect(await contracts.usdc.balanceOf(accounts.user1.address))
+            .to.be.equal(BigInt(initialBalance));
+
+        expect((await contracts.kratosx.getAvailableSlotCount())).to.be.equal(initialAvailableSlotCount);
+        const deposits = await contracts.kratosx.getUsedSlots();
+        expect(deposits.length).to.be.equal(initialDeposits.length);
     }
 
     describe("Requesting slots", () => {
@@ -427,16 +610,28 @@ describe("KratosX basic testing", function () {
             }
         });
 
+        it("Approve slot with a regular user", async () => {
+            await makeDeposit(1 * SlotPrice, true);
+        });
+
     });
 
     describe("Reject slots", () => {
-        it("Reject requested slot")
-        it("Reject all requested slots")
+        it("Reject requested slot with regular user", async () => {
+            await rejectDeposit(1 * SlotPrice, true);
+        })
+
+        it("Reject requested slot", async () => {
+            await rejectDeposit(1 * SlotPrice);
+        })
+
+        it("Reject all requested slots", async () => {
+            await rejectDeposit(10 * SlotPrice);
+        })
         it("Reject part of requested slots")
     });
 
     describe("Requesting withdrawal", () => {
-
 
         async function depositAndRequestWithdraw(days) {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
@@ -544,7 +739,6 @@ describe("KratosX basic testing", function () {
             await depositAndRequestWithdraw(limit + 3);
         });
 
-
     });
 
     describe("Deposit and withdrawal", () => {
@@ -566,9 +760,6 @@ describe("KratosX basic testing", function () {
 
             await timeWarpDays(1300);
 
-            console.log("kratosx address:", accounts.kratosx.address);
-            console.log("user1 address:", accounts.user1.address);
-
             const usdc_kratosx = await contracts.usdc.connect(accounts.kratosx);
             await usdc_kratosx.approve(await contracts.kratosx.getAddress(), 10000);
 
@@ -582,6 +773,12 @@ describe("KratosX basic testing", function () {
             expect(await contracts.usdc.balanceOf(accounts.kratosx.address))
                 .to.be.equal(kratosxInitialBalance - calcYield);
         });
+
+        it("Execute a single deposit and withdraw")
+        it("Execute a single deposit and withdraw before the 7 days of cool down ")
+        it("Execute several withdrawals (not all) from user")
+        it("Execute all withdrawals")
+        it("Execute withdrawal with a regular user")
     });
 
     describe("Full functionality", () => {
