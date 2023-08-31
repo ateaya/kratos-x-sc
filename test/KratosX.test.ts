@@ -13,8 +13,10 @@ import { BaseContract } from "ethers";
 import { string } from "hardhat/internal/core/params/argumentTypes";
 const helpers = require("@nomicfoundation/hardhat-network-helpers");
 import "@nomicfoundation/hardhat-chai-matchers";
+import exp from "constants";
 
-const SlotPrice = 5000;
+let SlotPrice = 0;
+
 
 interface ContractCollection {
     kratosx: ethers.BaseContract;
@@ -79,6 +81,10 @@ class Storage {
 
 describe("KratosX basic testing", function () {
 
+    function wad(dollars) {
+        return dollars * 1000000;
+    }
+
     // expectedCollectionLengths
     // We define a fixture to reuse the same setup in every test.
     // We use loadFixture to run this setup once, snapshot that state,
@@ -95,17 +101,20 @@ describe("KratosX basic testing", function () {
         // Token deployment
         const USDCFactory = (await ethers.getContractFactory('TestUSDC')).connect(accounts.usdc);
         const USDCInstance = await USDCFactory.deploy();
-        await USDCInstance.transfer(accounts.kratosx.address, 10000000);
-        await USDCInstance.transfer(accounts.user1.address, 10000000);
-        await USDCInstance.transfer(accounts.user2.address, 100000);
+        await USDCInstance.transfer(accounts.kratosx.address, wad(10000000));
+        await USDCInstance.transfer(accounts.user1.address, wad(1000000));
+        await USDCInstance.transfer(accounts.user2.address, wad(100000));
 
-        expect(await USDCInstance.balanceOf(accounts.kratosx.address)).to.be.equal(10000000);
-        expect(await USDCInstance.balanceOf(accounts.user1.address)).to.be.equal(10000000);
-        expect(await USDCInstance.balanceOf(accounts.user2.address)).to.be.equal(100000);
+        expect(await USDCInstance.balanceOf(accounts.kratosx.address)).to.be.equal(wad(10000000));
+        expect(await USDCInstance.balanceOf(accounts.user1.address)).to.be.equal(wad(1000000));
+        expect(await USDCInstance.balanceOf(accounts.user2.address)).to.be.equal(wad(100000));
 
         // Contract deployment
         const kratosXVaultFactory = (await ethers.getContractFactory("KratosX")).connect(accounts.kratosx);
         const kratoXInstance = await kratosXVaultFactory.deploy(USDCInstance.getAddress());
+
+        SlotPrice = parseInt(await kratoXInstance.getSlotValue());
+        expect(SlotPrice).to.be.equal(5000000000);
 
         const storage = new Storage(kratoXInstance);
 
@@ -117,7 +126,11 @@ describe("KratosX basic testing", function () {
         return { contracts, accounts, storage };
     }
 
-    function calculateYield(days, earlyAdoptBonus, extendBonus) {
+    function calculateYield(days, earlyAdoptBonus, extendBonus): number {
+        if (days <= 180) {
+            return 0;
+        }
+
         let percent = calculatePercentage(days);
 
         if (days > 1825) {
@@ -132,11 +145,11 @@ describe("KratosX basic testing", function () {
             percent += 1;
         }
 
-        return BigInt(Math.floor(SlotPrice * percent * days / (100 * 365)));
+        return Math.floor(SlotPrice * percent * days / (100 * 365));
     }
 
-    function calculateFullValue(days, earlyAdoptBonus, extendBonus) {
-        return BigInt(SlotPrice) + calculateYield(days, earlyAdoptBonus, extendBonus);
+    function calculateFullValue(days, earlyAdoptBonus, extendBonus): number {
+        return SlotPrice + calculateYield(days, earlyAdoptBonus, extendBonus);
     }
 
     async function timeWarpDays(days) {
@@ -144,7 +157,7 @@ describe("KratosX basic testing", function () {
     }
 
 
-    function calculatePercentage(days) {
+    function calculatePercentage(days): number {
         if (days <= 180) {
             return 0;
         } else if (days <= 365) {    //  < 1 year
@@ -176,7 +189,7 @@ describe("KratosX basic testing", function () {
 
         it("Calculate yield below 6 months", async () => {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-            const depositValue = 100000;
+            const depositValue = wad(100000);
 
             async function testInterval(earlyAdoptBonus, extendBonus) {
                 let calculatedYield = await contracts.kratosx.calculateYield(0, earlyAdoptBonus, extendBonus);
@@ -207,7 +220,7 @@ describe("KratosX basic testing", function () {
         it("Calculate yield below 2 years", async () => {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
 
-            const depositValue = 100000;
+            const depositValue = wad(100000);
             let calculatedYield = 0;
 
 
@@ -247,7 +260,7 @@ describe("KratosX basic testing", function () {
         it("Calculate yield below 3 years", async () => {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
 
-            const depositValue = 100000;
+            const depositValue = wad(100000);
             let calculatedYield = 0;
 
 
@@ -274,7 +287,7 @@ describe("KratosX basic testing", function () {
         it("Calculate yield below 4 years", async () => {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
 
-            const depositValue = 100000;
+            const depositValue = wad(100000);
             let calculatedYield = 0;
 
 
@@ -327,7 +340,7 @@ describe("KratosX basic testing", function () {
         it("Calculate yield above 5 years", async () => {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
 
-            const depositValue = 100000;
+            const depositValue = wad(100000);
             let calculatedYield = 0;
 
 
@@ -361,7 +374,7 @@ describe("KratosX basic testing", function () {
         it("Calculate yield weird values", async () => {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
 
-            const depositValue = 100000;
+            const depositValue = wad(100000);
             let calculatedYield = 0;
 
 
@@ -395,15 +408,19 @@ describe("KratosX basic testing", function () {
 
         }
 
+        getSlotValue = async () => {
+            await this.contracts.kratosx.getSlotValue();
+        }
+
         timeWarpDays = async (days) => {
             await ethers.provider.send("evm_increaseTime", [days * 24 * 60 * 60]);
         }
 
         getInitialValidationData = async (): Promise<ValidationData> => {
             return {
-                initialAvailableSlotCount: await this.contracts.kratosx.getAvailableSlotCount(),
+                initialAvailableSlotCount: parseInt(await this.contracts.kratosx.getAvailableSlotCount()),
                 initialDeposits: await this.contracts.kratosx.getUsedSlots(),
-                initialBalance: await this.contracts.usdc.balanceOf(this.accounts.user1.address),
+                initialBalance: parseInt(await this.contracts.usdc.balanceOf(this.accounts.user1.address)),
             }
         }
 
@@ -514,7 +531,7 @@ describe("KratosX basic testing", function () {
 
         expect(validationData.initialAvailableSlotCount).to.be.equal(100);
         expect(validationData.initialDeposits.length).to.be.equal(0);
-        expect(validationData.initialBalance).to.be.equal(10000000);
+        expect(validationData.initialBalance).to.be.equal(wad(1000000));
 
         await helpers.requestDeposit(accounts.user1, amount);
 
@@ -532,7 +549,7 @@ describe("KratosX basic testing", function () {
         expect(slotId).to.be.equal(expectedCount);
 
         expect(await contracts.usdc.balanceOf(accounts.user1.address))
-            .to.be.equal(BigInt(validationData.initialBalance) - BigInt(expectedCount) * BigInt(SlotPrice));
+            .to.be.equal(validationData.initialBalance - expectedCount * SlotPrice);
 
         expect((await contracts.kratosx.getAvailableSlotCount())).to.be.equal(100 - expectedCount);
         const deposits = await contracts.kratosx.getUsedSlots();
@@ -547,7 +564,7 @@ describe("KratosX basic testing", function () {
 
         expect(validationData.initialAvailableSlotCount).to.be.equal(100);
         expect(validationData.initialDeposits.length).to.be.equal(0);
-        expect(validationData.initialBalance).to.be.equal(10000000);
+        expect(validationData.initialBalance).to.be.equal(wad(1000000));
 
         await helpers.requestDeposit(accounts.user1, amount);
 
@@ -621,7 +638,7 @@ describe("KratosX basic testing", function () {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
 
             const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), 5000);
+            await usdc_user1.approve(await contracts.kratosx.getAddress(), SlotPrice);
 
             await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
                 .to.emit(contracts.kratosx, "DepositApproved")
@@ -729,28 +746,29 @@ describe("KratosX basic testing", function () {
         it("Execute withdraw without a request", async () => {
             const { contracts, accounts, storage } = await loadFixture(initEnvironment);
 
-            const user1InitialBalance = await contracts.usdc.balanceOf(accounts.user1.address);
-            const kratosxInitialBalance = await contracts.usdc.balanceOf(accounts.kratosx.address);
+            const user1InitialBalance = parseInt(await contracts.usdc.balanceOf(accounts.user1.address));
+            const kratosxInitialBalance = parseInt(await contracts.usdc.balanceOf(accounts.kratosx.address));
 
             const usdc_user1 = await contracts.usdc.connect(accounts.user1);
-            await usdc_user1.approve(await contracts.kratosx.getAddress(), 5000);
+            await usdc_user1.approve(await contracts.kratosx.getAddress(), SlotPrice);
 
             await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
                 .to.emit(contracts.kratosx, "DepositApproved")
                     .withArgs(accounts.user1.address, 1);
 
-            expect(await contracts.usdc.balanceOf(accounts.user1.address)).to.be.equal(9995000);
-            expect(await contracts.usdc.balanceOf(accounts.kratosx.address)).to.be.equal(10005000);
+            expect(await contracts.usdc.balanceOf(accounts.user1.address)).to.be.equal(wad(995000));
+            expect(await contracts.usdc.balanceOf(accounts.kratosx.address)).to.be.equal(wad(10005000));
 
             await timeWarpDays(1300);
 
+            const calcYield = calculateYield(1300, true, false);
+
             const usdc_kratosx = await contracts.usdc.connect(accounts.kratosx);
-            await usdc_kratosx.approve(await contracts.kratosx.getAddress(), 10000);
+            await usdc_kratosx.approve(await contracts.kratosx.getAddress(), SlotPrice + calcYield);
 
 
             await contracts.kratosx.executeWithdraw(1);
 
-            const calcYield = calculateYield(1300, true, false);
 
             expect(await contracts.usdc.balanceOf(accounts.user1.address))
                 .to.be.equal(user1InitialBalance + calcYield);

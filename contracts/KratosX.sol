@@ -33,10 +33,10 @@ contract KratosX is Pausable, Ownable
         bool hasExtendPeriodBonus;
     }
 
-    ERC20 immutable externalToken;      //  the address for the external token
-    uint256 constant slotValue = 5000;        //  the value of each deposit slot
-    uint8 constant slotCount = 100;        //  the value of each deposit slot
-    uint8 earlyAdoptBonus;            //  the amount of slots that will earn the early adoption bonus
+    ERC20 immutable externalToken;              //  the address for the external token
+    uint256 constant slotValue = 5000000000;    //  the value of each deposit slot
+    uint8 constant slotCount = 100;             //  the value of each deposit slot
+    uint8 earlyAdoptBonus;                      //  the amount of slots that will earn the early adoption bonus
 
     uint16 autoIncrementedId;
 
@@ -66,6 +66,14 @@ contract KratosX is Pausable, Ownable
      */
     function getUsedSlots() external view returns(Deposit[] memory) {
         return deposits;
+    }
+
+    /**
+     * @notice  Ritrieve the value of each deposit.
+     * @dev     Returns the necessary value to allocate a slot.
+     */
+    function getSlotValue() external pure returns(uint256) {
+        return slotValue;
     }
 
     /**
@@ -175,7 +183,7 @@ contract KratosX is Pausable, Ownable
         uint256 ratePercent;
 
         if (dayCount <= 180) {
-            ratePercent = 0;
+            return 0;                   // no bonus here
         } else if (dayCount <= 365) {    //  < 1 year
             ratePercent = 5;
         } else if (dayCount <= 730) {    //  1 years < dayCount > 2 years
