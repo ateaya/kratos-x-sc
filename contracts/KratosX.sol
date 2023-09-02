@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 // import "hardhat/console.sol";
 
-error DepositNotFound(uint256 id);
 
 /**
  * @author  Miguel Tadeu
@@ -18,6 +17,8 @@ error DepositNotFound(uint256 id);
 
 contract KratosX is Pausable, Ownable
 {
+    error DepositNotFound(uint256 id);
+
     event DepositRequested(uint256 id, address from);
     event DepositApproved(address owner, uint256 id);
     event DepositRejected(address depositor);
@@ -87,13 +88,15 @@ contract KratosX is Pausable, Ownable
      */
     function approveDeposit(address depositor, uint256 lockPeriod) external onlyOwner whenNotPaused {
         require(deposits.length < slotCount, "No slots available.");
-
-        // make the value transfer from the depositer account
-        externalToken.transferFrom(depositor, owner(), slotValue);
+        require(externalToken.allowance(depositor, address(this)) >= slotValue, "Not enough allowance.");
+        require(externalToken.balanceOf(depositor) >= slotValue, "Not enough balance.");
 
         uint16 id = _createDepositId();
 
         deposits.push(Deposit(id, depositor, uint32(block.timestamp), uint32(lockPeriod), _hasEarlyAdoptionBonus(), false));
+
+        // make the value transfer from the depositer account
+        externalToken.transferFrom(depositor, owner(), slotValue);
 
         emit DepositApproved(depositor, id);
     }
@@ -135,6 +138,9 @@ contract KratosX is Pausable, Ownable
      * @param   id  The id of the deposit to liquidate.
      */
     function executeWithdraw(uint256 id) external onlyOwner whenNotPaused {
+        require(externalToken.allowance(owner(), address(this)) >= slotValue, "Not enough allowance to withdraw.");
+        require(externalToken.balanceOf(owner()) >= slotValue, "Not enough funds to withdraw.");
+
         Deposit[] memory depositsInMemory = deposits;
         uint256 depositIndex = _findDeposit(depositsInMemory, id);
         Deposit memory deposit = depositsInMemory[depositIndex];
@@ -143,10 +149,10 @@ contract KratosX is Pausable, Ownable
             deposit.hasEarlyAdoptBonus,
             deposit.hasExtendPeriodBonus);
 
-        externalToken.transferFrom(owner(), deposit.owner, calculatedValue);
-
         deposits[depositIndex] = depositsInMemory[depositsInMemory.length - 1];
         deposits.pop();
+
+        externalToken.transferFrom(owner(), deposit.owner, calculatedValue);
 
         emit WithdrawExecuted(id, calculatedValue);
     }

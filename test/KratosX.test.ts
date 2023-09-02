@@ -33,6 +33,7 @@ interface ValidationData {
     initialAvailableSlotCount: number;
     initialDeposits: Array<any>;
     initialBalance: number;
+    initialAllowance: number;
 }
 
 class Storage {
@@ -404,6 +405,7 @@ describe("KratosX basic testing", function () {
                 initialAvailableSlotCount: 0,
                 initialDeposits: [],
                 initialBalance: 0,
+                initialAllowance: 0,
             };
 
         }
@@ -421,19 +423,22 @@ describe("KratosX basic testing", function () {
                 initialAvailableSlotCount: parseInt(await this.contracts.kratosx.getAvailableSlotCount()),
                 initialDeposits: await this.contracts.kratosx.getUsedSlots(),
                 initialBalance: parseInt(await this.contracts.usdc.balanceOf(this.accounts.user1.address)),
+                initialAllowance: parseInt(await this.contracts.usdc.allowance(this.accounts.user1.address, this.accounts.kratosx.address)),
             }
         }
 
         requestDeposit = async (user, value, signer = user) => {
-            const kratosContractAddress = await this.contracts.kratosx.getAddress();
+            const kratosxContractAddress = await this.contracts.kratosx.getAddress();
             const contract = await this.contracts.usdc.connect(signer);
 
-            await expect(contract.approve(kratosContractAddress, value))
+            await expect(contract.approve(kratosxContractAddress, value))
                 .to.emit(this.contracts.usdc, "Approval")
-                .withArgs(user.address, kratosContractAddress, value);
+                .withArgs(user.address, kratosxContractAddress, value);
+
+            expect(await this.contracts.usdc.allowance(this.accounts.user1.address, kratosxContractAddress)).to.be.equal(value);
 
             if (this.valueChecks) {
-                expect(await this.contracts.usdc.allowance(user.address, kratosContractAddress)).to.be.equal(value);
+                expect(await this.contracts.usdc.allowance(user.address, kratosxContractAddress)).to.be.equal(value);
             }
         }
 
@@ -445,6 +450,7 @@ describe("KratosX basic testing", function () {
             await expect(this.contracts.kratosx.approveDeposit(user.address, 180))
                 .to.emit(this.contracts.kratosx, "DepositApproved");
                     // .withArgs(user.address, undefined);
+
 
             if (this.valueChecks) {
                 const deposits = await this.contracts.kratosx.getUsedSlots();
@@ -519,92 +525,101 @@ describe("KratosX basic testing", function () {
                 expect(deposits.length).to.be.equal(this.validationData.initialDeposits.length);
             }
         }
-    }
 
+        /////////////////////////////////////////////////////
 
-    async function makeDeposit(amount, useRegularUser = false) {
-        const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-        const helpers = new Helpers(contracts, accounts);
-        const expectedCount = Number(amount / SlotPrice);
-        const validationData: ValidationData = await helpers.getInitialValidationData()
-        const kratosContractAddress = await contracts.kratosx.getAddress();
+        metaMakeDeposit = async (amount, useRegularUser = false) => {
+            const kratosxContractAddress = await this.contracts.kratosx.getAddress();
+            const expectedCount = Number(amount / SlotPrice);
+            const validationData: ValidationData = await this.getInitialValidationData()
 
-        expect(validationData.initialAvailableSlotCount).to.be.equal(100);
-        expect(validationData.initialDeposits.length).to.be.equal(0);
-        expect(validationData.initialBalance).to.be.equal(wad(1000000));
+            expect(validationData.initialAvailableSlotCount).to.be.equal(100);
+            expect(validationData.initialDeposits.length).to.be.equal(0);
+            expect(validationData.initialBalance).to.be.equal(wad(1000000));
 
-        await helpers.requestDeposit(accounts.user1, amount);
+            await this.requestDeposit(this.accounts.user1, amount);
 
-        let slotId = 0;
-        while(await contracts.usdc.allowance(accounts.user1.address, kratosContractAddress) >= SlotPrice) {
-            ++slotId;
-            if (useRegularUser) {
-                await helpers.approveDepositRegularUser(accounts.user1, accounts.user1);
-                return;
-            } else {
-                await helpers.approveDeposit(accounts.user1)
+            let slotId = 0;
+            while(await this.contracts.usdc.allowance(this.accounts.user1.address, kratosxContractAddress) >= SlotPrice) {
+                ++slotId;
+                if (useRegularUser) {
+                    await this.approveDepositRegularUser(this.accounts.user1, this.accounts.user1);
+                    return;
+                } else {
+                    await this.approveDeposit(this.accounts.user1)
+                }
             }
+
+            expect(slotId).to.be.equal(expectedCount);
+
+            expect(await this.contracts.usdc.balanceOf(this.accounts.user1.address))
+                .to.be.equal(validationData.initialBalance - expectedCount * SlotPrice);
+
+            expect((await this.contracts.kratosx.getAvailableSlotCount())).to.be.equal(100 - expectedCount);
+            const deposits = await this.contracts.kratosx.getUsedSlots();
+            expect(deposits.length).to.be.equal(expectedCount);
+
         }
 
-        expect(slotId).to.be.equal(expectedCount);
+        metaRejectDeposit = async (amount, useRegularUser = false) => {
+            const validationData: ValidationData = await this.getInitialValidationData()
 
-        expect(await contracts.usdc.balanceOf(accounts.user1.address))
-            .to.be.equal(validationData.initialBalance - expectedCount * SlotPrice);
+            expect(validationData.initialAvailableSlotCount).to.be.equal(100);
+            expect(validationData.initialDeposits.length).to.be.equal(0);
+            expect(validationData.initialBalance).to.be.equal(wad(1000000));
 
-        expect((await contracts.kratosx.getAvailableSlotCount())).to.be.equal(100 - expectedCount);
-        const deposits = await contracts.kratosx.getUsedSlots();
-        expect(deposits.length).to.be.equal(expectedCount);
+            await this.requestDeposit(this.accounts.user1, amount);
 
-    }
+            if (useRegularUser) {
+                await this.rejectDepositRegularUser(this.accounts.user1, this.accounts.user1);
+            } else {
+                await this.rejectDeposit(this.accounts.user1);
+            }
 
-    async function rejectDeposit(amount, useRegularUser = false) {
-        const { contracts, accounts, storage } = await loadFixture(initEnvironment);
-        const helpers = new Helpers(contracts, accounts);
-        const validationData: ValidationData = await helpers.getInitialValidationData()
+            expect(await this.contracts.usdc.balanceOf(this.accounts.user1.address))
+                .to.be.equal(BigInt(validationData.initialBalance));
 
-        expect(validationData.initialAvailableSlotCount).to.be.equal(100);
-        expect(validationData.initialDeposits.length).to.be.equal(0);
-        expect(validationData.initialBalance).to.be.equal(wad(1000000));
-
-        await helpers.requestDeposit(accounts.user1, amount);
-
-        if (useRegularUser) {
-            await helpers.rejectDepositRegularUser(accounts.user1, accounts.user1);
-        } else {
-            await helpers.rejectDeposit(accounts.user1);
+            expect((await this.contracts.kratosx.getAvailableSlotCount())).to.be.equal(validationData.initialAvailableSlotCount);
+            const deposits = await this.contracts.kratosx.getUsedSlots();
+            expect(deposits.length).to.be.equal(validationData.initialDeposits.length);
         }
-
-        expect(await contracts.usdc.balanceOf(accounts.user1.address))
-            .to.be.equal(BigInt(validationData.initialBalance));
-
-        expect((await contracts.kratosx.getAvailableSlotCount())).to.be.equal(validationData.initialAvailableSlotCount);
-        const deposits = await contracts.kratosx.getUsedSlots();
-        expect(deposits.length).to.be.equal(validationData.initialDeposits.length);
     }
+
+
 
     describe("Requesting slots", () => {
 
         it("Request the first slot", async () => {
-            await makeDeposit(SlotPrice);
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(SlotPrice);
         });
 
         it("Request 2 slots", async () => {
-            await makeDeposit(2 * SlotPrice);
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(2 * SlotPrice);
         });
 
 
         it("Request 10 slots", async () => {
-            await makeDeposit(10 * SlotPrice);
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(10 * SlotPrice);
         });
 
         it("Request 100 slots", async () => {
-            await makeDeposit(100 * SlotPrice);
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(100 * SlotPrice);
         });
 
         it("Request 101 slots", async () => {
             try {
 
-                await makeDeposit(101 * SlotPrice);
+                const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+                const helpers = new Helpers(contracts, accounts);
+                await helpers.metaMakeDeposit(101 * SlotPrice);
                 expect(false).to.be.true;
             } catch(e) {
                 expect(e.message).to.be.equal("VM Exception while processing transaction: reverted with reason string 'No slots available.'")
@@ -612,22 +627,30 @@ describe("KratosX basic testing", function () {
         });
 
         it("Approve slot with a regular user", async () => {
-            await makeDeposit(1 * SlotPrice, true);
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(1 * SlotPrice, true);
         });
 
     });
 
     describe("Reject slots", () => {
         it("Reject requested slot with regular user", async () => {
-            await rejectDeposit(1 * SlotPrice, true);
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaRejectDeposit(1 * SlotPrice, true);
         })
 
         it("Reject requested slot", async () => {
-            await rejectDeposit(1 * SlotPrice);
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaRejectDeposit(1 * SlotPrice);
         })
 
         it("Reject all requested slots", async () => {
-            await rejectDeposit(10 * SlotPrice);
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaRejectDeposit(10 * SlotPrice);
         })
         it("Reject part of requested slots")
     });
