@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 // import "hardhat/console.sol";
 
-
 /**
  * @author  Miguel Tadeu
  * @title   Kratos-X Vault Smart Contract
@@ -17,7 +16,17 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract KratosX is Pausable, Ownable
 {
+    uint256 constant LockPeriod6M = 180;
+    uint256 constant LockPeriod1Y = 365;
+    uint256 constant LockPeriod2Y = 730;
+    uint256 constant LockPeriod3Y = 1095;
+    uint256 constant LockPeriod4Y = 1460;
+    uint256 constant LockPeriod5Y = 1825;
+
+    enum LockPeriod { SixMonths, OneYear, TwoYears, ThreeYears, FourYears, FiveYears }
+
     error DepositNotFound(uint256 id);
+    error InvalidLockPeriod();
 
     event DepositRequested(uint256 id, address from);
     event DepositApproved(address owner, uint256 id);
@@ -29,7 +38,7 @@ contract KratosX is Pausable, Ownable
         uint16 id;                   //  deposit id
         address owner;               //  the wallet that baught this slot
         uint32 approveTimestamp;     //  timestamp when the deposit was created
-        uint32 lockingPeriod;        //  locking period
+        LockPeriod lockPeriod;       //  locking period
         bool hasEarlyAdoptBonus;
         bool hasExtendPeriodBonus;
     }
@@ -38,6 +47,7 @@ contract KratosX is Pausable, Ownable
     uint256 constant slotValue = 5000000000;    //  the value of each deposit slot
     uint8 constant slotCount = 100;             //  the value of each deposit slot
     uint8 earlyAdoptBonus;                      //  the amount of slots that will earn the early adoption bonus
+    uint32 extendLockPeriodBonusLimit;          //  the timestamp when this bonus will not be available any longer
 
     uint16 autoIncrementedId;
 
@@ -47,6 +57,7 @@ contract KratosX is Pausable, Ownable
         externalToken = ERC20(token);
         earlyAdoptBonus = 3;
         autoIncrementedId = 0;
+        extendLockPeriodBonusLimit = uint32(block.timestamp + 365 days);
     }
 
 
@@ -70,11 +81,31 @@ contract KratosX is Pausable, Ownable
     }
 
     /**
-     * @notice  Ritrieve the value of each deposit.
+     * @notice  Retrieve the value of each deposit.
      * @dev     Returns the necessary value to allocate a slot.
      */
     function getSlotValue() external pure returns(uint256) {
         return slotValue;
+    }
+
+    /**
+     * @notice  Set a specific amount of early adotion deposits available.
+     * @dev     Set a specific amount of early adotion deposits available.
+     * @param   slots  The number os deposit slots to make available.
+     */
+    function setEarlyAdotpSlots(uint256 slots) external onlyOwner whenNotPaused {
+        require(slots <= type(uint8).max, "Too many early adoption bonus slots.");
+        earlyAdoptBonus = uint8(slots);
+    }
+
+    /**
+     * @notice  Set the limit for which the lock period extension bonus will be available.
+     * @dev     Set the limit for which the lock period extension bonus will be available.
+     * @param   timestamp  The limit timestamp that the bonus will be available.
+     */
+    function setExtendLockPeriodBonus(uint256 timestamp) external onlyOwner whenNotPaused {
+        require(timestamp <= type(uint32).max, "Period too long for extention bonus.");
+        extendLockPeriodBonusLimit = uint32(timestamp);
     }
 
     /**
@@ -86,14 +117,14 @@ contract KratosX is Pausable, Ownable
      * @param   depositor  The depositor wallet address on the external token.
      * @param   lockPeriod  The predicted locking period.
      */
-    function approveDeposit(address depositor, uint256 lockPeriod) external onlyOwner whenNotPaused {
+    function approveDeposit(address depositor, LockPeriod lockPeriod) external onlyOwner whenNotPaused {
         require(deposits.length < slotCount, "No slots available.");
         require(externalToken.allowance(depositor, address(this)) >= slotValue, "Not enough allowance.");
         require(externalToken.balanceOf(depositor) >= slotValue, "Not enough balance.");
 
         uint16 id = _createDepositId();
 
-        deposits.push(Deposit(id, depositor, uint32(block.timestamp), uint32(lockPeriod), _hasEarlyAdoptionBonus(), false));
+        deposits.push(Deposit(id, depositor, uint32(block.timestamp), lockPeriod, _hasEarlyAdoptionBonus(), false));
 
         // make the value transfer from the depositer account
         externalToken.transferFrom(depositor, owner(), slotValue);
@@ -157,6 +188,29 @@ contract KratosX is Pausable, Ownable
         emit WithdrawExecuted(id, calculatedValue);
     }
 
+    /**
+     * @notice  Extend the locking period.
+     * @dev     Extend the locking period.
+     * @param   id  The id of the deposit slot.
+     * @param   lockPeriod  The locking period (1 => 1 year, 2 => 2 years, 3 => 3 years, 4 => 4 years, 5 => 5 years)
+     */
+    function extendLockPeriod(uint256 id, LockPeriod lockPeriod) external whenNotPaused {
+        require(lockPeriod > LockPeriod.SixMonths, "Can not set the locking period with this value.");
+
+        Deposit[] memory depositsInMemory = deposits;
+        uint256 depositIndex = _findDeposit(depositsInMemory, id);
+        Deposit memory deposit = depositsInMemory[depositIndex];
+
+        require(deposit.lockPeriod < lockPeriod, "Can only increase the locking period.");
+
+        if(extendLockPeriodBonusLimit >= block.timestamp && deposit.lockPeriod == LockPeriod.SixMonths) {
+            deposit.hasExtendPeriodBonus = true;
+        }
+
+        deposit.lockPeriod = lockPeriod;
+
+        deposits[depositIndex] = deposit;
+    }
     ///////////////////////////////////////////////////////
     //  Public
     ///////////////////////////////////////////////////////
@@ -176,7 +230,6 @@ contract KratosX is Pausable, Ownable
         _unpause();
     }
 
-
     /**
      * @notice  Calculate the yield for a value deposited in time.
      * @dev     Call this function to estimate or calculate the yield for a deposit.
@@ -188,17 +241,17 @@ contract KratosX is Pausable, Ownable
         public pure returns(uint256) {
         uint256 ratePercent;
 
-        if (dayCount <= 180) {
+        if (dayCount <= LockPeriod6M) {
             return 0;                   // no bonus here
-        } else if (dayCount <= 365) {    //  < 1 year
+        } else if (dayCount <= LockPeriod1Y) {    //  < 1 year
             ratePercent = 5;
-        } else if (dayCount <= 730) {    //  1 years < dayCount > 2 years
+        } else if (dayCount <= LockPeriod2Y) {    //  1 years < dayCount > 2 years
             ratePercent = 5;
-        } else if (dayCount <= 1095) {   //  2 years < dayCount > 3 years
+        } else if (dayCount <= LockPeriod3Y) {   //  2 years < dayCount > 3 years
             ratePercent = 6;
-        } else if (dayCount <= 1460) {   //  3 years < dayCount > 4 years
+        } else if (dayCount <= LockPeriod4Y) {   //  3 years < dayCount > 4 years
             ratePercent = 7;
-        } else if (dayCount <= 1825) {   //  4 years < dayCount > 5 years
+        } else if (dayCount <= LockPeriod5Y) {   //  4 years < dayCount > 5 years
             ratePercent = 8;
         } else {                        //  > 5 years
             dayCount = 1825;            //  cap the day count
@@ -209,7 +262,7 @@ contract KratosX is Pausable, Ownable
             ratePercent = _increment(ratePercent);
         }
 
-        if (hasExtendBonus && dayCount >= 365) {
+        if (hasExtendBonus && dayCount >= LockPeriod1Y) {
             ratePercent = _increment(ratePercent);
         }
 
@@ -243,13 +296,12 @@ contract KratosX is Pausable, Ownable
     }
 
     function _timestampInDays(uint256 timestamp) private pure returns(uint256) {
-        return timestamp / (60 * 60 * 24);
+        return timestamp / 1 days;
     }
 
     function _findDeposit(Deposit[] memory depositsInMemory, uint256 id) private pure returns(uint256) {
-        Deposit[] memory _deposits = depositsInMemory;  // TODO: check why this optimizes gas
-        for (uint256 index = 0; index < _deposits.length; index = _increment(index)) {
-            if (_deposits[index].id == id) {
+        for (uint256 index = 0; index < depositsInMemory.length; index = _increment(index)) {
+            if (depositsInMemory[index].id == id) {
                 return index;
             }
         }
@@ -257,7 +309,8 @@ contract KratosX is Pausable, Ownable
     }
 
     function _getDepositById(uint256 id) private view returns(Deposit memory) {
-        Deposit[] memory depositsInMemory = deposits;   // TODO: check why this optimizes gas
+        Deposit[] memory depositsInMemory = deposits;
+
         for (uint256 index = 0; index < depositsInMemory.length; index = _increment(index)) {
             if (depositsInMemory[index].id == id) {
                 return depositsInMemory[index];

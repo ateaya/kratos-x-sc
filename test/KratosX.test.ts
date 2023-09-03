@@ -36,6 +36,25 @@ interface ValidationData {
     initialAllowance: number;
 }
 
+interface DepositRecord {
+    id: number;
+    owner: string,
+    approveTimestamp: number,
+    lockingPeriod: number,
+    hasEarlyAdoptBonus: boolean,
+    hasExtendPeriodBonus: boolean,
+}
+
+const LockPeriod = {
+    SixMonths: 0,
+    OneYear: 1,
+    TwoYears: 2,
+    ThreeYears: 3,
+    FourYears: 4,
+    FiveYears: 5,
+}
+
+
 class Storage {
     contract: any = undefined;
     constructor(contract: any) {
@@ -410,6 +429,27 @@ describe("KratosX basic testing", function () {
 
         }
 
+        convertDepositData(item): DepositRecord {
+            return {
+                id: item[0],
+                owner: item[1],
+                approveTimestamp: item[2],
+                lockingPeriod: item[3],
+                hasEarlyAdoptBonus: item[4],
+                hasExtendPeriodBonus: item[5],
+            }
+        }
+
+        convertDepositDataArray(results): DepositRecord[] {
+            return results.map((item) => {
+                return this.convertDepositData(item);
+            });
+        }
+
+        getUsedSlots = async (): Promise<DepositRecord[]> => {
+            return this.convertDepositDataArray(await this.contracts.kratosx.getUsedSlots());
+        }
+
         getSlotValue = async () => {
             await this.contracts.kratosx.getSlotValue();
         }
@@ -447,7 +487,7 @@ describe("KratosX basic testing", function () {
                 this.validationData = await this.getInitialValidationData();
             }
 
-            await expect(this.contracts.kratosx.approveDeposit(user.address, 180))
+            await expect(this.contracts.kratosx.approveDeposit(user.address, LockPeriod.SixMonths))
                 .to.emit(this.contracts.kratosx, "DepositApproved");
                     // .withArgs(user.address, undefined);
 
@@ -471,7 +511,7 @@ describe("KratosX basic testing", function () {
 
             const contract = await this.contracts.kratosx.connect(signer);
 
-            await expect(contract.approveDeposit(user.address, 180))
+            await expect(contract.approveDeposit(user.address, LockPeriod.SixMonths))
                 .to.revertedWith("Ownable: caller is not the owner");
 
             if (this.valueChecks) {
@@ -663,7 +703,7 @@ describe("KratosX basic testing", function () {
             const usdc_user1 = await contracts.usdc.connect(accounts.user1);
             await usdc_user1.approve(await contracts.kratosx.getAddress(), SlotPrice);
 
-            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
+            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, LockPeriod.SixMonths))
                 .to.emit(contracts.kratosx, "DepositApproved")
                     .withArgs(accounts.user1.address, 1);
 
@@ -775,7 +815,7 @@ describe("KratosX basic testing", function () {
             const usdc_user1 = await contracts.usdc.connect(accounts.user1);
             await usdc_user1.approve(await contracts.kratosx.getAddress(), SlotPrice);
 
-            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, 180))
+            await expect(contracts.kratosx.approveDeposit(accounts.user1.address, LockPeriod.SixMonths))
                 .to.emit(contracts.kratosx, "DepositApproved")
                     .withArgs(accounts.user1.address, 1);
 
@@ -804,6 +844,130 @@ describe("KratosX basic testing", function () {
         it("Execute several withdrawals (not all) from user")
         it("Execute all withdrawals")
         it("Execute withdrawal with a regular user")
+    });
+
+    describe("Extending the locking period", () => {
+        it("Extend the locking period to an invalid id", async () => {
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(SlotPrice);
+
+            await expect(contracts.kratosx.extendLockPeriod(123, LockPeriod.FiveYears))
+                .to.revertedWithCustomError(contracts.kratosx, "DepositNotFound")
+                .withArgs(123);
+            });
+
+        it("Extend the locking period to six months", async () => {
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(SlotPrice);
+
+            await expect(contracts.kratosx.extendLockPeriod(1, LockPeriod.SixMonths))
+                .to.revertedWith("Can not set the locking period with this value.")
+        });
+
+        it("Extend the locking period with bonus", async () => {
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(SlotPrice);
+
+            const initialSlots = await helpers.getUsedSlots();
+            expect(initialSlots.length).to.be.equal(1);
+            expect(initialSlots[0].id).to.be.equal(1);
+            expect(initialSlots[0].lockingPeriod).to.be.equal(LockPeriod.SixMonths);
+            expect(initialSlots[0].hasExtendPeriodBonus).to.be.false;
+
+            await contracts.kratosx.extendLockPeriod(1, LockPeriod.OneYear);
+
+            const finalSlots = await helpers.getUsedSlots();
+            expect(finalSlots[0].lockingPeriod).to.be.equal(LockPeriod.OneYear);
+            expect(finalSlots[0].hasExtendPeriodBonus).to.be.true;
+        });
+
+        it("Extend the locking period to a lower period", async () => {
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(SlotPrice);
+
+            const initialSlots = await helpers.getUsedSlots();
+            expect(initialSlots.length).to.be.equal(1);
+            expect(initialSlots[0].id).to.be.equal(1);
+            expect(initialSlots[0].lockingPeriod).to.be.equal(LockPeriod.SixMonths);
+            expect(initialSlots[0].hasExtendPeriodBonus).to.be.false;
+
+            await contracts.kratosx.extendLockPeriod(1, LockPeriod.FourYears);
+
+            const finalSlots = await helpers.getUsedSlots();
+            expect(finalSlots[0].lockingPeriod).to.be.equal(LockPeriod.FourYears);
+            expect(finalSlots[0].hasExtendPeriodBonus).to.be.true;
+
+            await expect(contracts.kratosx.extendLockPeriod(1, LockPeriod.OneYear))
+                .to.revertedWith("Can only increase the locking period.");
+        });
+
+        it("Extend the locking period more then once", async () => {
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(SlotPrice);
+
+            let depositSlots = await helpers.getUsedSlots();
+            expect(depositSlots.length).to.be.equal(1);
+            expect(depositSlots[0].id).to.be.equal(1);
+            expect(depositSlots[0].lockingPeriod).to.be.equal(LockPeriod.SixMonths);
+            expect(depositSlots[0].hasExtendPeriodBonus).to.be.false;
+
+            await contracts.kratosx.extendLockPeriod(1, LockPeriod.OneYear);
+
+            depositSlots = await helpers.getUsedSlots();
+            expect(depositSlots[0].lockingPeriod).to.be.equal(LockPeriod.OneYear);
+            expect(depositSlots[0].hasExtendPeriodBonus).to.be.true;
+
+            await contracts.kratosx.extendLockPeriod(1, LockPeriod.TwoYears);
+
+            depositSlots = await helpers.getUsedSlots();
+            expect(depositSlots[0].lockingPeriod).to.be.equal(LockPeriod.TwoYears);
+            expect(depositSlots[0].hasExtendPeriodBonus).to.be.true;
+
+            await contracts.kratosx.extendLockPeriod(1, LockPeriod.ThreeYears);
+
+            depositSlots = await helpers.getUsedSlots();
+            expect(depositSlots[0].lockingPeriod).to.be.equal(LockPeriod.ThreeYears);
+            expect(depositSlots[0].hasExtendPeriodBonus).to.be.true;
+
+            await contracts.kratosx.extendLockPeriod(1, LockPeriod.FourYears);
+
+            depositSlots = await helpers.getUsedSlots();
+            expect(depositSlots[0].lockingPeriod).to.be.equal(LockPeriod.FourYears);
+            expect(depositSlots[0].hasExtendPeriodBonus).to.be.true;
+
+            await contracts.kratosx.extendLockPeriod(1, LockPeriod.FiveYears);
+
+            depositSlots = await helpers.getUsedSlots();
+            expect(depositSlots[0].lockingPeriod).to.be.equal(LockPeriod.FiveYears);
+            expect(depositSlots[0].hasExtendPeriodBonus).to.be.true;
+        });
+
+        it("Extend the locking period without bonus", async () => {
+            const { contracts, accounts, storage } = await loadFixture(initEnvironment);
+            const helpers = new Helpers(contracts, accounts);
+            await helpers.metaMakeDeposit(SlotPrice);
+
+            const initialSlots = await helpers.getUsedSlots();
+            expect(initialSlots.length).to.be.equal(1);
+            expect(initialSlots[0].id).to.be.equal(1);
+            expect(initialSlots[0].lockingPeriod).to.be.equal(LockPeriod.SixMonths);
+            expect(initialSlots[0].hasExtendPeriodBonus).to.be.false;
+
+            helpers.timeWarpDays(1000);
+
+            await contracts.kratosx.extendLockPeriod(1, LockPeriod.OneYear);
+
+            const finalSlots = await helpers.getUsedSlots();
+            expect(finalSlots[0].lockingPeriod).to.be.equal(LockPeriod.OneYear);
+            expect(finalSlots[0].hasExtendPeriodBonus).to.be.false;
+        });
+
+        it("Extend the locking period extension bonus limit")
     });
 
     describe("Full functionality", () => {
