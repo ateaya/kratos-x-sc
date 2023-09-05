@@ -1,0 +1,38 @@
+{
+  "name": "Kratos-X vault",
+  "version": "1.0.0",
+  "description": "This is the Kratos-X vault smart contract",
+  "main": "index.js",
+  "scripts": {
+    "deploy-kratosx-testnet": "npx hardhat run scripts/deploy-kratosx-testnet.ts --network cronosTestnet",
+    "deploy-usdc-testnet": "npx hardhat run scripts/deploy-usdc-testnet.ts --network cronosTestnet",
+    "deploy-vault-mainnet": "npx hardhat run scripts/deploy-cronos-token.js --network cronos",
+    "deploy-usdc-token-mainnet": "npx hardhat run scripts/deploy-usdc-token.js --network cronos"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@cronos-labs/hardhat-cronoscan": "^0.0.5",
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.2",
+    "@nomicfoundation/hardhat-ethers": "^3.0.4",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.8",
+    "@nomicfoundation/hardhat-toolbox": "^3.0.0",
+    "@nomicfoundation/hardhat-verify": "^1.1.1",
+    "@openzeppelin/contracts-upgradeable": "^4.9.3",
+    "@openzeppelin/hardhat-upgrades": "^2.2.1",
+    "@types/chai": "^4.3.5",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.4.2",
+    "async-mutex": "^0.4.0",
+    "ethers": "^6.6.4",
+    "hardhat": "^2.17.0",
+    "hardhat-storage-layout": "^0.1.7",
+    "mocha": "^10.2.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.9.2",
+    "dotenv": "^16.3.1"
+  }
+}

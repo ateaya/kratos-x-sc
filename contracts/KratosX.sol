@@ -95,6 +95,7 @@ contract KratosX is Pausable, Ownable
      */
     function setEarlyAdotpSlots(uint256 slots) external onlyOwner whenNotPaused {
         require(slots <= type(uint8).max, "Too many early adoption bonus slots.");
+
         earlyAdoptBonus = uint8(slots);
     }
 
@@ -105,6 +106,7 @@ contract KratosX is Pausable, Ownable
      */
     function setExtendLockPeriodBonus(uint256 timestamp) external onlyOwner whenNotPaused {
         require(timestamp <= type(uint32).max, "Period too long for extention bonus.");
+
         extendLockPeriodBonusLimit = uint32(timestamp);
     }
 
