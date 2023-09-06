@@ -1,0 +1,75 @@
+<mxfile host="app.diagrams.net" modified="2023-09-06T20:44:47.027Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36" etag="ufl8ykL0yzZgrGjQeBMa" version="21.7.2" type="device">
+  <diagram name="Page-1" id="2YBvvXClWsGukQMizWep">
+    <mxGraphModel dx="1434" dy="774" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-5" value=":Backend" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="1">
+          <mxGeometry x="80" y="40" width="100" height="600" as="geometry" />
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-6" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="Vo1s79o7QJjt8sq2_JI0-5">
+          <mxGeometry x="45" y="130" width="10" height="330" as="geometry" />
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-7" value=":USDC" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="1">
+          <mxGeometry x="390" y="40" width="100" height="600" as="geometry" />
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-8" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="Vo1s79o7QJjt8sq2_JI0-7">
+          <mxGeometry x="45" y="140" width="10" height="320" as="geometry" />
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-9" value=":Kratos-X SM" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="1">
+          <mxGeometry x="710" y="40" width="100" height="600" as="geometry" />
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-10" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};" vertex="1" parent="Vo1s79o7QJjt8sq2_JI0-9">
+          <mxGeometry x="45" y="70" width="10" height="390" as="geometry" />
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-11" value="" style="endArrow=open;html=1;rounded=0;endFill=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="130" y="200" as="sourcePoint" />
+            <mxPoint x="440" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-12" value="verify funds available" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="Vo1s79o7QJjt8sq2_JI0-11">
+          <mxGeometry x="-0.6353" y="-2" relative="1" as="geometry">
+            <mxPoint x="93" y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-13" value="" style="endArrow=open;html=1;rounded=0;endFill=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="127.75" y="310" as="sourcePoint" />
+            <mxPoint x="752.25" y="310" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="382.75" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-14" value="call kratosx.executeWithdraw()" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="Vo1s79o7QJjt8sq2_JI0-13">
+          <mxGeometry x="-0.376" y="2" relative="1" as="geometry">
+            <mxPoint x="65" y="-13" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-15" value="" style="endArrow=open;html=1;rounded=0;endFill=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="439.5" y="380" as="sourcePoint" />
+            <mxPoint x="759.5" y="380" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-16" value="call ERC20.transferFrom(&amp;lt;kratos address&amp;gt;, &amp;lt;user address&amp;gt;, &amp;lt;value&amp;gt;)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="Vo1s79o7QJjt8sq2_JI0-15">
+          <mxGeometry x="-0.2969" y="-3" relative="1" as="geometry">
+            <mxPoint x="49" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-17" value="" style="endArrow=open;html=1;rounded=0;endFill=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="130" y="250" as="sourcePoint" />
+            <mxPoint x="440" y="250" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Vo1s79o7QJjt8sq2_JI0-18" value="call ERC20.approve(&amp;lt;contract owner address&amp;gt;, &amp;lt;kratos address&amp;gt;, &amp;lt;value&amp;gt;)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="Vo1s79o7QJjt8sq2_JI0-17">
+          <mxGeometry x="0.1032" y="3" relative="1" as="geometry">
+            <mxPoint x="-11" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
