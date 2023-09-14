@@ -31,8 +31,8 @@ contract KratosX is Pausable, Ownable
     event DepositRequested(uint256 id, address from);
     event DepositApproved(address owner, uint256 id);
     event DepositRejected(address depositor);
-    event WithdrawRequested(uint256 id, uint256 estimatedAmount);
-    event WithdrawExecuted(uint256 id, uint256 calculatedAmount);
+    event WithdrawalRequested(uint256 id, uint256 estimatedAmount);
+    event WithdrawalExecuted(uint256 id, uint256 calculatedAmount);
 
     struct Deposit {
         uint16 id;                   //  deposit id
@@ -68,7 +68,7 @@ contract KratosX is Pausable, Ownable
      * @notice  Retrieve the available deposit slots.
      * @dev     Returns a list with the available deposit slots.
      */
-    function getAvailableSlotCount() external view returns(uint256) {
+    function getAvailableSlotCount() public view returns(uint256) {
         return slotCount - deposits.length;
     }
 
@@ -135,6 +135,36 @@ contract KratosX is Pausable, Ownable
     }
 
     /**
+     * @notice  Approve deposits limited by the amount set by the allowance.
+     * @dev     This method will attempt to make deposits limited by the available slots
+     * and the allowance set.
+     * @param   depositor  The address of the wallet the is requesting the deposit.
+     * @param   lockPeriod  The selected locking period.
+     */
+    function approveDeposits(address depositor, LockPeriod lockPeriod) external onlyOwner whenNotPaused {
+        require(deposits.length < slotCount, "No slots available.");
+
+        uint256 allowance = externalToken.allowance(depositor, address(this));
+        uint256 requestedSlots = uint256(allowance / slotValue);
+        require(requestedSlots >= 1, "Not enough allowance.");
+        require(requestedSlots <= getAvailableSlotCount(), "Not enough available slots.");
+        require(externalToken.balanceOf(depositor) >= requestedSlots * slotValue, "Not enough balance. Please rectify the allowance.");
+
+        while(requestedSlots >= 1) {
+            uint16 id = _createDepositId();
+
+            deposits.push(Deposit(id, depositor, uint32(block.timestamp), lockPeriod, _hasEarlyAdoptionBonus(), false));
+
+            // make the value transfer from the depositer account
+            externalToken.transferFrom(depositor, owner(), slotValue);
+
+            emit DepositApproved(depositor, id);
+
+            --requestedSlots;
+        }
+    }
+
+    /**
      * @notice  After the user approve an amount in the external currency, the backend may reject the deposit
      * if the user didn't complete the information required to generate the writen contract. This is the function
      * that should be called in this situation.
@@ -153,14 +183,27 @@ contract KratosX is Pausable, Ownable
      * @dev     The user may call this function to request a withdraw before the stipulated locking period.
      * @param   id  The id of the deposit to withdraw.
      */
-    function requestWithdrawal(uint256 id) external whenNotPaused {
+    function requestWithdrawal(uint256 id) public whenNotPaused {
         Deposit memory deposit = _getDepositById(id);
+
+        require(deposit.owner == _msgSender(), "You are not the deposit owner.");
 
         // account for 7 days of withdrawal time
         uint256 dayCount = _timestampInDays(block.timestamp + 7 days - deposit.approveTimestamp);
         uint256 estimatedYield = calculateYield(dayCount, deposit.hasEarlyAdoptBonus, deposit.hasExtendPeriodBonus);
 
-        emit WithdrawRequested(id, slotValue + estimatedYield);
+        emit WithdrawalRequested(id, slotValue + estimatedYield);
+    }
+
+    /**
+     * @notice  Request withdrawals for a list of ids.
+     * @dev     Calls the requestWidthdrawal(...) for each id in the list.
+     * @param   ids  The list of ids to withdraw.
+     */
+    function requestWithdrawals(uint256[] calldata ids) external whenNotPaused {
+        for(uint256 index; index < ids.length; ++index) {
+            requestWithdrawal(ids[index]);
+        }
     }
 
     /**
@@ -170,8 +213,9 @@ contract KratosX is Pausable, Ownable
      * @dev     Called by the backend to liquidate the deposit.
      * @param   id  The id of the deposit to liquidate.
      */
-    function executeWithdraw(uint256 id) external onlyOwner whenNotPaused {
-        require(externalToken.allowance(owner(), address(this)) >= slotValue, "Not enough allowance to withdraw.");
+    function executeWithdrawal(uint256 id) public onlyOwner whenNotPaused {
+        uint256 allowance = externalToken.allowance(owner(), address(this));
+        require(allowance >= slotValue, "Not enough allowance to withdraw.");
         require(externalToken.balanceOf(owner()) >= slotValue, "Not enough funds to withdraw.");
 
         Deposit[] memory depositsInMemory = deposits;
@@ -182,12 +226,25 @@ contract KratosX is Pausable, Ownable
             deposit.hasEarlyAdoptBonus,
             deposit.hasExtendPeriodBonus);
 
+        require(allowance >= calculatedValue, "Not enough allowance after calculated withdrawal value.");
+
         deposits[depositIndex] = depositsInMemory[depositsInMemory.length - 1];
         deposits.pop();
 
         externalToken.transferFrom(owner(), deposit.owner, calculatedValue);
 
-        emit WithdrawExecuted(id, calculatedValue);
+        emit WithdrawalExecuted(id, calculatedValue);
+    }
+
+    /**
+     * @notice  Execute several withdrawals in the same call.
+     * @dev     Calls executeWithdrawal(...) for each id passed in the list.
+     * @param   ids  The list of ids to widthdraw.
+     */
+    function executeWithdrawals(uint256[] calldata ids) external onlyOwner whenNotPaused {
+        for(uint256 index; index < ids.length; ++index) {
+            executeWithdrawal(ids[index]);
+        }
     }
 
     /**

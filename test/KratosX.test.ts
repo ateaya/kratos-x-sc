@@ -715,8 +715,9 @@ describe("KratosX basic testing", function () {
                 days = 1826;
             }
 
-            await expect(contracts.kratosx.requestWithdrawal(1))
-                .to.emit(contracts.kratosx, "WithdrawRequested")
+            const kratosx_user1 = contracts.kratosx.connect(accounts.user1);
+            await expect(kratosx_user1.requestWithdrawal(1))
+                .to.emit(contracts.kratosx, "WithdrawalRequested")
                     .withArgs(1, calculateFullValue(days, true, false));
         }
 
@@ -830,7 +831,7 @@ describe("KratosX basic testing", function () {
             await usdc_kratosx.approve(await contracts.kratosx.getAddress(), SlotPrice + calcYield);
 
 
-            await contracts.kratosx.executeWithdraw(1);
+            await contracts.kratosx.executeWithdrawal(1);
 
 
             expect(await contracts.usdc.balanceOf(accounts.user1.address))
@@ -968,6 +969,25 @@ describe("KratosX basic testing", function () {
         });
 
         it("Extend the locking period extension bonus limit")
+    });
+
+    describe("Approve several deposits", () => {
+        it("Request a deposit with allowance higher then the balance")
+        it("Request a deposit with not enough allowance")
+        it("Properly request 1 slot")
+        it("Properly request 2 slots")
+        it("Properly request 10 slots")
+        it("Properly request 100 slots")
+        it("Properly request 101 slots")
+    });
+
+    describe("Request several withdrawals", () => {
+        it("Request withdrawals with an empty list")
+        it("Request withdrawal with an invalid id")
+        it("Request a deposit without being the deposit owner")
+        it("Properly request a withdrawal")
+        it("Properly request 2 withdrawals")
+        it("Properly request 10 withdrawals")
     });
 
     describe("Full functionality", () => {

@@ -12,8 +12,6 @@ async function main() {
     const USDCInstance = await USDCFactory.deploy();
     const usdcAddress = await USDCInstance.getAddress();
 
-    await USDCInstance.transfer(user1Address, 1000000000000);
-
     console.log("USDCToken deployed to:", usdcAddress);
     console.log(`Please update .env with: USDC_CONTRACT_ADDRESS = "${usdcAddress}"`);
 }

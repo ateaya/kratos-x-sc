@@ -7,5 +7,7 @@ typechain-types
 
 # Hardhat files
 cache
-
+.vscode
+artifacts/hardhat
+artifacts/@openzeppelin
 
