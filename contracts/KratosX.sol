@@ -30,9 +30,12 @@ contract KratosX is Pausable, Ownable
 
     event DepositRequested(uint256 id, address from);
     event DepositApproved(address owner, uint256 id);
+    event DepositsApproved(address owner);
     event DepositRejected(address depositor);
     event WithdrawalRequested(uint256 id, uint256 estimatedAmount);
+    event MultipleWithdrawalsRequested(uint256[] ids, uint256 estimatedAmount);
     event WithdrawalExecuted(uint256 id, uint256 calculatedAmount);
+    event MultipleWithdrawalsExecuted(uint256[] id);
 
     struct Deposit {
         uint16 id;                   //  deposit id
@@ -94,7 +97,7 @@ contract KratosX is Pausable, Ownable
      * @param   slots  The number os deposit slots to make available.
      */
     function setEarlyAdotpSlots(uint256 slots) external onlyOwner whenNotPaused {
-        require(slots <= type(uint8).max, "Too many early adoption bonus slots.");
+        require(slots <= type(uint8).max, "Too many bonus slots.");
 
         earlyAdoptBonus = uint8(slots);
     }
@@ -105,7 +108,7 @@ contract KratosX is Pausable, Ownable
      * @param   timestamp  The limit timestamp that the bonus will be available.
      */
     function setExtendLockPeriodBonus(uint256 timestamp) external onlyOwner whenNotPaused {
-        require(timestamp <= type(uint32).max, "Period too long for extention bonus.");
+        require(timestamp <= type(uint32).max, "Period too long.");
 
         extendLockPeriodBonusLimit = uint32(timestamp);
     }
@@ -142,26 +145,37 @@ contract KratosX is Pausable, Ownable
      * @param   lockPeriod  The selected locking period.
      */
     function approveDeposits(address depositor, LockPeriod lockPeriod) external onlyOwner whenNotPaused {
-        require(deposits.length < slotCount, "No slots available.");
+        require(getAvailableSlotCount() >= 1, "No slots available.");
 
         uint256 allowance = externalToken.allowance(depositor, address(this));
         uint256 requestedSlots = uint256(allowance / slotValue);
         require(requestedSlots >= 1, "Not enough allowance.");
         require(requestedSlots <= getAvailableSlotCount(), "Not enough available slots.");
-        require(externalToken.balanceOf(depositor) >= requestedSlots * slotValue, "Not enough balance. Please rectify the allowance.");
+        require(externalToken.balanceOf(depositor) >= requestedSlots * slotValue, "Not enough balance.");
 
-        while(requestedSlots >= 1) {
+        for(uint256 index; index < requestedSlots; ++index) {
             uint16 id = _createDepositId();
 
             deposits.push(Deposit(id, depositor, uint32(block.timestamp), lockPeriod, _hasEarlyAdoptionBonus(), false));
-
-            // make the value transfer from the depositer account
-            externalToken.transferFrom(depositor, owner(), slotValue);
-
-            emit DepositApproved(depositor, id);
-
-            --requestedSlots;
         }
+
+        externalToken.transferFrom(depositor, owner(), requestedSlots * slotValue);
+
+        emit DepositsApproved(depositor);
+
+
+        // while(requestedSlots >= 1) {
+        //     uint16 id = _createDepositId();
+
+        //     deposits.push(Deposit(id, depositor, uint32(block.timestamp), lockPeriod, _hasEarlyAdoptionBonus(), false));
+
+        //     // make the value transfer from the depositer account
+        //     externalToken.transferFrom(depositor, owner(), slotValue);
+
+        //     emit DepositApproved(depositor, id);
+
+        //     --requestedSlots;
+        // }
     }
 
     /**
@@ -215,7 +229,7 @@ contract KratosX is Pausable, Ownable
      */
     function executeWithdrawal(uint256 id) public onlyOwner whenNotPaused {
         uint256 allowance = externalToken.allowance(owner(), address(this));
-        require(allowance >= slotValue, "Not enough allowance to withdraw.");
+        require(allowance >= slotValue, "Not enough allowance.");
         require(externalToken.balanceOf(owner()) >= slotValue, "Not enough funds to withdraw.");
 
         Deposit[] memory depositsInMemory = deposits;
@@ -226,7 +240,7 @@ contract KratosX is Pausable, Ownable
             deposit.hasEarlyAdoptBonus,
             deposit.hasExtendPeriodBonus);
 
-        require(allowance >= calculatedValue, "Not enough allowance after calculated withdrawal value.");
+        require(allowance >= calculatedValue, "Not enough allowance.");
 
         deposits[depositIndex] = depositsInMemory[depositsInMemory.length - 1];
         deposits.pop();
@@ -254,13 +268,13 @@ contract KratosX is Pausable, Ownable
      * @param   lockPeriod  The locking period (1 => 1 year, 2 => 2 years, 3 => 3 years, 4 => 4 years, 5 => 5 years)
      */
     function extendLockPeriod(uint256 id, LockPeriod lockPeriod) external whenNotPaused {
-        require(lockPeriod > LockPeriod.SixMonths, "Can not set the locking period with this value.");
+        require(lockPeriod > LockPeriod.SixMonths, "Invalid locking period value.");
 
         Deposit[] memory depositsInMemory = deposits;
         uint256 depositIndex = _findDeposit(depositsInMemory, id);
         Deposit memory deposit = depositsInMemory[depositIndex];
 
-        require(deposit.lockPeriod < lockPeriod, "Can only increase the locking period.");
+        require(lockPeriod >= deposit.lockPeriod, "Invalid locking period value.");
 
         if(extendLockPeriodBonusLimit >= block.timestamp && deposit.lockPeriod == LockPeriod.SixMonths) {
             deposit.hasExtendPeriodBonus = true;

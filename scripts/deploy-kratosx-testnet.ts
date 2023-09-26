@@ -2,6 +2,7 @@ import { configDotenv } from "dotenv";
 import { ethers } from "hardhat";
 
 async function main() {
+    const isContinuousIntegration = process.env.npm_config_ci;
     const usdcAddress = configDotenv().parsed?.USDC_CONTRACT_ADDRESS;
 
     if (usdcAddress === "" || usdcAddress === undefined) {
@@ -18,7 +19,11 @@ async function main() {
     const kratosXInstance = await kratosXVaultFactory.deploy(usdcAddress);
     const kratosxVaultAddress = await kratosXInstance.getAddress();
 
-    console.log("Kratos Vault deployed to:", kratosxVaultAddress);
+    if(isContinuousIntegration) {
+        console.log(kratosxVaultAddress);
+    } else {
+        console.log("Kratos-X Vault deployed to:", kratosxVaultAddress);
+    }
 }
 
 // We recommend this pattern to be able to use async/await everywhere

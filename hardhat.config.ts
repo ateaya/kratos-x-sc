@@ -14,18 +14,7 @@ import "hardhat-gas-reporter";
 import "hardhat-storage-layout";
 import "@cronos-labs/hardhat-cronoscan";
 
-
-function utf8ToHex(str: string) {
-    return Array.from(str).map(c =>
-        c.charCodeAt(0) < 128 ? c.charCodeAt(0).toString(16) :
-            encodeURIComponent(c).replace(/\%/g,'').toLowerCase()
-    ).join('');
-  }
-
-// const myPrivateKey: string = utf8ToHex(<string>process.env.MY_PRIVATE_KEY);
 const myPrivateKey: string = <string>process.env.MY_PRIVATE_KEY;
-
-console.log("My private key:", myPrivateKey);
 
 task("accounts", "Prints the list of accounts", async (args, hre) => {
     const accounts = await hre.ethers.getSigners();

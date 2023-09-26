@@ -864,7 +864,7 @@ describe("KratosX basic testing", function () {
             await helpers.metaMakeDeposit(SlotPrice);
 
             await expect(contracts.kratosx.extendLockPeriod(1, LockPeriod.SixMonths))
-                .to.revertedWith("Can not set the locking period with this value.")
+                .to.revertedWith("Invalid locking period value.")
         });
 
         it("Extend the locking period with bonus", async () => {
@@ -903,7 +903,7 @@ describe("KratosX basic testing", function () {
             expect(finalSlots[0].hasExtendPeriodBonus).to.be.true;
 
             await expect(contracts.kratosx.extendLockPeriod(1, LockPeriod.OneYear))
-                .to.revertedWith("Can only increase the locking period.");
+                .to.revertedWith("Invalid locking period value.");
         });
 
         it("Extend the locking period more then once", async () => {
