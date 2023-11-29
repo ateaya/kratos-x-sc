@@ -662,7 +662,7 @@ describe("KratosX basic testing", function () {
                 await helpers.metaMakeDeposit(101 * SlotPrice);
                 expect(false).to.be.true;
             } catch(e) {
-                expect(e.message).to.be.equal("VM Exception while processing transaction: reverted with reason string 'No slots available.'")
+                expect(e.message).to.be.equal("VM Exception while processing transaction: reverted with custom error 'NotEnoughSlotsAvailable()'")
             }
         });
 
@@ -864,7 +864,8 @@ describe("KratosX basic testing", function () {
             await helpers.metaMakeDeposit(SlotPrice);
 
             await expect(contracts.kratosx.extendLockPeriod(1, LockPeriod.SixMonths))
-                .to.revertedWith("Invalid locking period value.")
+                .to.revertedWithCustomError(contracts.kratosx, "InvalidLockPeriod")
+                // .to.revertedWith("Invalid locking period value.")
         });
 
         it("Extend the locking period with bonus", async () => {
@@ -903,7 +904,8 @@ describe("KratosX basic testing", function () {
             expect(finalSlots[0].hasExtendPeriodBonus).to.be.true;
 
             await expect(contracts.kratosx.extendLockPeriod(1, LockPeriod.OneYear))
-                .to.revertedWith("Invalid locking period value.");
+                .to.revertedWithCustomError(contracts.kratosx, "InvalidLockPeriod")
+                // .to.revertedWith("Invalid locking period value.");
         });
 
         it("Extend the locking period more then once", async () => {
