@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
-pragma solidity ^0.8.0;     // TODO: Bump up version
-
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";         // TODO: use interface IERC20 instead
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-// import "hardhat/console.sol";
 
 /**
  * @author  Miguel Tadeu,PRC
@@ -16,6 +15,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract KratosX is Pausable, Ownable
 {
+    using SafeERC20 for IERC20;
+
     uint256 constant LockPeriod6M = 180;
     uint256 constant LockPeriod1Y = 365;
     uint256 constant LockPeriod2Y = 730;
@@ -51,9 +52,9 @@ contract KratosX is Pausable, Ownable
         bool hasExtendPeriodBonus;
     }
 
-    ERC20 immutable externalToken;              //  the address for the external token          // TODO: Use SafeERC20???
-    uint256 constant slotValue = 5000000000;    //  the value of each deposit slot
-    uint8 constant slotCount = 100;             //  the value of each deposit slot
+    IERC20 immutable externalToken;             //  the address for the external token
+    uint256 constant slotValue = 5000000000;    //  the value of each deposit slot              // TODO: Account for multiple decimals in token
+    uint8 constant slotCount = 100;             //  the deposit slots count
     uint8 earlyAdoptBonus;                      //  the amount of slots that will earn the early adoption bonus
     uint32 extendLockPeriodBonusLimit;          //  the timestamp when this bonus will not be available any longer
 
@@ -61,8 +62,8 @@ contract KratosX is Pausable, Ownable
 
     Deposit[] public deposits;
 
-    constructor(address token) Pausable() Ownable() {
-        externalToken = ERC20(token);
+    constructor(address token) Pausable() Ownable(_msgSender()) {
+        externalToken = IERC20(token);
         earlyAdoptBonus = 3;
         autoIncrementedId = 0;
         extendLockPeriodBonusLimit = uint32(block.timestamp + 365 days);
@@ -133,7 +134,7 @@ contract KratosX is Pausable, Ownable
         deposits.push(Deposit(id, depositor, uint32(block.timestamp), lockPeriod, _hasEarlyAdoptionBonus(), false));
 
         // make the value transfer from the depositer account
-        externalToken.transferFrom(depositor, owner(), slotValue);      // TODO: No result check. Use safeTransferFrom()?
+        externalToken.safeTransferFrom(depositor, owner(), slotValue);
 
         emit DepositApproved(depositor, id);
     }
@@ -150,7 +151,6 @@ contract KratosX is Pausable, Ownable
         uint256 requestedSlots = uint256(allowance / slotValue);
         if (requestedSlots == 0) revert NotEnoughAllowance();
         if (requestedSlots > getAvailableSlotCount()) revert NotEnoughSlotsAvailable();
-        if (externalToken.balanceOf(depositor) >= requestedSlots * slotValue) revert NotEnoughBalance();
 
         for(uint256 index; index < requestedSlots; ++index) {
             uint16 id = _createDepositId();
@@ -158,23 +158,9 @@ contract KratosX is Pausable, Ownable
             deposits.push(Deposit(id, depositor, uint32(block.timestamp), lockPeriod, _hasEarlyAdoptionBonus(), false));
         }
 
-        externalToken.transferFrom(depositor, owner(), requestedSlots * slotValue);     // TODO: No result check. Use safeTransferFrom()?
+        externalToken.safeTransferFrom(depositor, owner(), requestedSlots * slotValue);
 
         emit DepositsApproved(depositor);
-
-
-        // while(requestedSlots >= 1) {
-        //     uint16 id = _createDepositId();
-
-        //     deposits.push(Deposit(id, depositor, uint32(block.timestamp), lockPeriod, _hasEarlyAdoptionBonus(), false));
-
-        //     // make the value transfer from the depositer account
-        //     externalToken.transferFrom(depositor, owner(), slotValue);
-
-        //     emit DepositApproved(depositor, id);
-
-        //     --requestedSlots;
-        // }
     }
 
     /**
@@ -184,7 +170,7 @@ contract KratosX is Pausable, Ownable
      * @dev     Call this function by the backend when the deposit was not accepted.
      * @param   depositor  The depositor wallet address on the external token.
      */
-    function rejectDeposit(address depositor) external onlyOwner {
+    function rejectDeposit(address depositor) external onlyOwner {      // TODO: remove events for frontend
         emit DepositRejected(depositor);
     }
 
@@ -227,10 +213,6 @@ contract KratosX is Pausable, Ownable
      * @param   id  The id of the deposit to liquidate.
      */
     function executeWithdrawal(uint256 id) public onlyOwner whenNotPaused {
-        uint256 allowance = externalToken.allowance(owner(), address(this));
-        if (allowance < slotValue) revert NotEnoughAllowance();
-        if (externalToken.balanceOf(owner()) < slotValue) revert NotEnoughFundsToWithdraw();
-
         Deposit[] memory depositsInMemory = deposits;
         uint256 depositIndex = _findDeposit(depositsInMemory, id);
         Deposit memory deposit = depositsInMemory[depositIndex];
@@ -239,12 +221,10 @@ contract KratosX is Pausable, Ownable
             deposit.hasEarlyAdoptBonus,
             deposit.hasExtendPeriodBonus);
 
-        if (allowance < calculatedValue) revert NotEnoughAllowance();       // TODO: what about the balance? Balance can be == to slot but < calculatedValue
-
         deposits[depositIndex] = depositsInMemory[depositsInMemory.length - 1];
         deposits.pop();
 
-        externalToken.transferFrom(owner(), deposit.owner, calculatedValue);        // TODO: No result check. Use safeTransferFrom()?
+        externalToken.safeTransferFrom(owner(), deposit.owner, calculatedValue);
 
         emit WithdrawalExecuted(id, calculatedValue);
     }
@@ -266,7 +246,7 @@ contract KratosX is Pausable, Ownable
      * @param   id  The id of the deposit slot.
      * @param   lockPeriod  The locking period (1 => 1 year, 2 => 2 years, 3 => 3 years, 4 => 4 years, 5 => 5 years)
      */
-    function extendLockPeriod(uint256 id, LockPeriod lockPeriod) external whenNotPaused {       // TODO: understand the lockPeriod param and logic
+    function extendLockPeriod(uint256 id, LockPeriod lockPeriod) external whenNotPaused {
         if (lockPeriod <= LockPeriod.SixMonths) revert InvalidLockPeriod();
 
         Deposit[] memory depositsInMemory = deposits;
