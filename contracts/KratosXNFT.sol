@@ -6,23 +6,36 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract KratosXNFT is ERC721, ERC721URIStorage, AccessControl {
+    error SoulBoundToken();
+
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     uint256 private _nextTokenId;
 
-    constructor(address admin, address minter) ERC721("KratosXNFT", "KXN") {
+    constructor(address admin, address operator) ERC721("KratosXNFT", "KXN") {
         _grantRole(ADMIN_ROLE, admin);
-        _grantRole(MINTER_ROLE, minter);
+        _grantRole(OPERATOR_ROLE, operator);
 
         _setRoleAdmin(ADMIN_ROLE, ADMIN_ROLE);
-        _setRoleAdmin(MINTER_ROLE, ADMIN_ROLE);
+        _setRoleAdmin(OPERATOR_ROLE, ADMIN_ROLE);
     }
 
-    function safeMint(address to, string memory uri) public onlyRole(MINTER_ROLE) {
+    function safeMint(address to, string memory uri) external onlyRole(OPERATOR_ROLE) {
         uint256 tokenId = _nextTokenId++;
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
+    }
+
+    function burn(uint256 tokenId) external onlyRole(OPERATOR_ROLE) {
+        _burn(tokenId);
+    }
+
+    // Soulbound token
+
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
+        if (auth != address(0) && to != address(0)) revert SoulBoundToken();
+        return super._update(to, tokenId, auth);
     }
 
     // Required overrides
