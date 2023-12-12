@@ -5,12 +5,12 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract AteayaWhitelist is Pausable, AccessControl {
-    event Updated(address wallet, bool enabled);
+    event Updated(uint256 hash, bool enabled);
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
-    mapping(address => bool) public isWhitelisted;
+    mapping(uint256 hash => bool) public isWhitelisted;     // hash = uint256(keccak256(abi.encodePacked(address)))
 
     constructor(address admin, address operator) {
         _grantRole(ADMIN_ROLE, admin);
@@ -20,15 +20,15 @@ contract AteayaWhitelist is Pausable, AccessControl {
         _setRoleAdmin(OPERATOR_ROLE, ADMIN_ROLE);
     }
 
-    function update(address wallet, bool whitelist) public onlyRole(OPERATOR_ROLE) {
-        isWhitelisted[wallet] = whitelist;
+    function update(uint256 hash, bool whitelist) public onlyRole(OPERATOR_ROLE) {
+        isWhitelisted[hash] = whitelist;
 
-        emit Updated(wallet, whitelist);
+        emit Updated(hash, whitelist);
     }
 
-    function updateMulti(address[] memory wallets, bool whitelist) external {
-        for (uint256 i = 0; i < wallets.length; ++i) {
-            update(wallets[i], whitelist);
+    function updateMulti(uint256[] memory hashs, bool whitelist) external {
+        for (uint256 i = 0; i < hashs.length; ++i) {
+            update(hashs[i], whitelist);
         }
     }
 
