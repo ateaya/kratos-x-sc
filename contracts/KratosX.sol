@@ -65,7 +65,7 @@ contract KratosX is Pausable, Ownable
     constructor(address token) Pausable() Ownable(_msgSender()) {
         externalToken = IERC20(token);
         earlyAdoptBonus = 3;
-        autoIncrementedId = 0;
+        autoIncrementedId = 0;      // TODO: remove, not needed
         extendLockPeriodBonusLimit = uint32(block.timestamp + 365 days);
     }
 

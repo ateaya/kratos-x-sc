@@ -5,13 +5,21 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract KratosXNFT is ERC721, ERC721URIStorage, AccessControl {
+contract KratosXBond is ERC721, ERC721URIStorage, AccessControl {
     error SoulBoundToken();
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
+    struct Metadata {
+        
+        uint32 approveTimestamp;     //  timestamp when the deposit was created
+        bool hasEarlyAdoptBonus;
+    }
+
     uint256 private _nextTokenId;
+
+    mapping (uint256 tokenId => Metadata) public metadata;
 
     constructor(address admin, address operator) ERC721("KratosXNFT", "KXN") {
         _grantRole(ADMIN_ROLE, admin);
