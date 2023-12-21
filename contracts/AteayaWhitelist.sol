@@ -4,18 +4,22 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
+/**
+ * @author  PRC
+ * @title   Ateaya KYC Account Whitelist Smart Contract
+ */
 contract AteayaWhitelist is Pausable, AccessControl {
     event Updated(uint256 hash, bool enabled);
 
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 private constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 private constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     mapping(uint256 hash => bool) public isWhitelisted;
 
     /**
-     * @notice  Constructor.
-     * @param   admin       Initial admin.
-     * @param   operator    Initial operator.
+     * @notice  Constructor
+     * @param   admin       Initial admin (owner)
+     * @param   operator    Initial operator (updater)
      */
     constructor(address admin, address operator) {
         _grantRole(ADMIN_ROLE, admin);
