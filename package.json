@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "deploy-kratosx-testnet": "npx hardhat run scripts/deploy-kratosx-testnet.ts --network cronosTestnet",
+    "deploy-whitelist-testnet": "npx hardhat run scripts/deploy-whitelist-testnet.ts --network cronosTestnet",
     "deploy-usdc-testnet": "npx hardhat run scripts/deploy-usdc-testnet.ts --network cronosTestnet",
     "faucet": "npx hardhat run scripts/faucet.ts --network cronosTestnet",
     "deploy-vault-mainnet": "npx hardhat run scripts/deploy-cronos-token.js --network cronos",

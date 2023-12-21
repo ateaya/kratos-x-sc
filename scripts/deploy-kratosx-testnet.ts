@@ -1,5 +1,8 @@
 import { configDotenv } from "dotenv";
-import { ethers } from "hardhat";
+import { ethers, artifacts } from "hardhat";
+import { writeFileSync } from 'fs';
+
+const fs = require('node:fs');
 
 async function main() {
     const isContinuousIntegration = process.env.npm_config_ci;
@@ -15,14 +18,26 @@ async function main() {
         contractSigner: signers[0],
     }
 
-    const kratosXVaultFactory = (await ethers.getContractFactory("KratosX")).connect(accounts.contractSigner);
-    const kratosXInstance = await kratosXVaultFactory.deploy(usdcAddress);
-    const kratosxVaultAddress = await kratosXInstance.getAddress();
+    const contractName = "KratosX"
+
+    const contractFactory = (await ethers.getContractFactory(contractName)).connect(accounts.contractSigner);
+    const contractInstance = await contractFactory.deploy(usdcAddress);
+
+    const data = {
+        name: contractName,
+        dateTime: new Date(),
+        address: await contractInstance.getAddress(),
+        abi: artifacts.readArtifactSync(contractName).abi
+    };
+
+    writeFileSync(`${contractName}.json`, JSON.stringify(data), {
+        flag: 'w',
+    });
 
     if(isContinuousIntegration) {
-        console.log(kratosxVaultAddress);
+        console.log(data.address);
     } else {
-        console.log("Kratos-X Vault deployed to:", kratosxVaultAddress);
+        console.log("Contract '", contractName, "' deployed to:", data.address);
     }
 }
 
