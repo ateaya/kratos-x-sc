@@ -512,7 +512,8 @@ describe("KratosX basic testing", function () {
             const contract = await this.contracts.kratosx.connect(signer);
 
             await expect(contract.approveDeposit(user.address, LockPeriod.SixMonths))
-                .to.revertedWith("Ownable: caller is not the owner");
+                .to.be.revertedWithCustomError(this.contracts.kratosx, "OwnableUnauthorizedAccount");
+                // .to.revertedWith("Ownable: caller is not the owner");
 
             if (this.valueChecks) {
                 const deposits = await this.contracts.kratosx.getUsedSlots();
@@ -553,7 +554,8 @@ describe("KratosX basic testing", function () {
             const contract = await this.contracts.kratosx.connect(signer);
 
             await expect(contract.rejectDeposit(user.address))
-                    .to.revertedWith("Ownable: caller is not the owner");
+                .to.be.revertedWithCustomError(this.contracts.kratosx, "OwnableUnauthorizedAccount");
+                // .to.revertedWith("Ownable: caller is not the owner");
 
             if (this.valueChecks) {
                 const deposits = await this.contracts.kratosx.getUsedSlots();
